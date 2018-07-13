@@ -27,26 +27,26 @@ crisflash binary will be available in bin/crisflash
 
 ### How to run
 
-## Example 1.
+#### Example 1.
 ```
 crisflash -g genome.fa -s candidate_sequence.fa -o validated_gRNAs.bed -m 5
 ```
 Validates all gRNAs identified in candidate_sequence.fa for off-targets with up to 5 mismatches genome wide for genome sequence in genome.fa.
 Results are saved in validated_gRNAs.bed where gRNA sequence is preserved in 'name' field and off-target validation score in score field.
 
-## Example 2.
+#### Example 2.
 ```
 crisflash -g genome.fa -@ candidate_gRNAs.bed -o validated_gRNAs.bed
 ```
 As Example 1 but here candidate gRNAs are provided in candidate_gRNAs.bed.
 
-## Example 3.
+#### Example 3.
 ```
 crisflash -g genome.fa -V phased_variants.vcf -s candidate_area.fa -o validated_gRNAs.bed
 ```
 As Example 1 but here the reference genome sequence in genome.fa is adapted to reflect the variant data provided in phased_variants.vcf.
 
-## Example 4.
+#### Example 4.
 ```
 crisflash -g genome.fa -a genome_gRNAs_dump.bed
 ```
