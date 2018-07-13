@@ -54,7 +54,7 @@ Lists and saves all gRNAs found in genome.fa to genome_gRNAs_dump.bed. Note that
 output are not being validated for off-targets.
 
 ## Crisflash options
-
+```
 -g FILE       FASTA format reference genome.
 -b FILE       BED file containing all gRNAs of a genome (the file can be created with -a flag).
 -s FILE       FASTA file containing candidate sequence.
@@ -68,7 +68,7 @@ output are not being validated for off-targets.
 -l    	      Include low complexity areas to off-target validation. Default: use only upper case sequences in soft masked genome.
 -h    	      Print help.
 -v    	      Print version.
-
+```
 ## Versioning
 
 Crisflash is currently in release 1.0.0. We aim to follow versioning principles described in https://semver.org/.
