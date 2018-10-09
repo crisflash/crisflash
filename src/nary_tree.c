@@ -31,8 +31,6 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "nary_tree.h"
 
-#define LENGTH_SEQ (20)
-
 /* 
    Written by Adrien Jacquin, April 2017
    based on a prototype developed by Margus Lukk.
@@ -41,6 +39,237 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 /***************************************
           CONTAINER FONCTIONS
 ***************************************/
+
+int baseMismatch(char seqnt, char pamnt) {
+  /* Checks whether base in DNA sequence (seqnt) mismatches with base in PAM pattern (pamnt).
+     Assumes uppercase values. Returns 1 if mismatch, 0 otherwise.
+     Matching is provided based on  IUPAC representation for a position on a DNA sequence
+     and were taken from https://en.wikipedia.org/wiki/Nucleic_acid_notation.
+  */
+  switch(pamnt)
+    {
+    case 'N':
+      switch(seqnt)
+	{
+	case 'A':
+	  return 0;
+	  break;
+	case 'T':
+	  return 0;
+	  break;
+	case 'G':
+	  return 0;
+	  break;
+	case 'C':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'G':
+      switch(seqnt)
+	{
+	case 'G':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'A':
+      switch(seqnt)
+	{
+	case 'A':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'T':
+      switch(seqnt)
+	{
+	case 'T':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'C':
+      switch(seqnt)
+	{
+	case 'C':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'R':
+      switch(seqnt)
+	{
+	case 'A':
+	  return 0;
+	  break;
+	case 'G':
+	    return 0;
+	    break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'Y':
+      switch(seqnt)
+	{
+	case 'C':
+	  return 0;
+	  break;
+	case 'T':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'V':
+      switch(seqnt)
+	{
+	case 'A':
+	  return 0;
+	  break;
+	case 'C':
+	  return 0;
+	  break;
+	case 'G':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'W':
+      switch(seqnt)
+	{
+	case 'A':
+	  return 0;
+	  break;
+	case 'T':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'S':
+	switch(seqnt)
+	  {
+	  case 'G':
+	    return 0;
+	    break;
+	  case 'T':
+	    return 0;
+	    break;
+	  default:
+	    return 1;
+	    break;
+	  }
+	break;
+    case 'M':
+      switch(seqnt)
+	{
+	case 'A':
+	  return 0;
+	  break;
+	case 'C':
+	  return 0;
+	    break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'K':
+      switch(seqnt)
+	{
+	case 'G':
+	  return 0;
+	  break;
+	case 'T':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'B':
+      switch(seqnt)
+	{
+	case 'C':
+	  return 0;
+	  break;
+	case 'G':
+	  return 0;
+	  break;
+	case 'T':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    case 'D':
+      switch(seqnt)
+	{
+	  case 'A':
+	    return 0;
+	    break;
+	  case 'G':
+	    return 0;
+	    break;
+	  case 'T':
+	    return 0;
+	    break;
+	  default:
+	    return 1;
+	    break;
+	}
+      break;
+    case 'H':
+      switch(seqnt)
+	{
+	case 'A':
+	  return 0;
+	  break;
+	case 'C':
+	  return 0;
+	  break;
+	case 'T':
+	  return 0;
+	  break;
+	default:
+	  return 1;
+	  break;
+	}
+      break;
+    default:
+      fprintf(stderr,"Error! '%c' part of PAM sequence not a valid nucleotide\n", pamnt);
+      exit(1);
+    }
+}
+
 
 mcontainer* mcontainer_install(int nelem, int calen)
 {
@@ -409,11 +638,12 @@ trieNodeT* TrieCreateNode(char nt)
 trieNodeTT* TrieCreateNodeTerminal(char nt)
 {
 	trieNodeTT* a = (trieNodeTT*) malloc(sizeof(trieNodeTT));
+	a->allocated_array_len=10;
+	a->chrs = malloc(sizeof(int)*a->allocated_array_len);
+	a->starts = malloc(sizeof(int)*a->allocated_array_len);
+	a->strands = malloc(sizeof(char)*a->allocated_array_len);
 	a->brother = NULL;
 	a->hits = 0;
-	a->chrs = NULL;
-	a->strands = NULL;
-	a->starts = NULL;
 	a->nt = nt;
 	a->score = 0;
 	return a;
@@ -862,6 +1092,122 @@ int TrieAdd(trie* T, char* array, int alen, int chr, char strand, int start, flo
 	return 1;
 }
 
+int TrieAddNEW(trie* T, char* array, int alen, int chr, char strand, int start, float score, int* identical_seq)
+{
+  /* This function is 30% faster compared to TrieAdd. With hg38.fa -l being 30% compared to TrieAdd (i.e. 20m vs 30m). */
+  
+        // Take as arguments a trie, a sequence, the length of this sequence, the chr number,
+	// the strand (+,- or *), the start position, the score (default = 0) and the vcf structure
+	// Return 1 if sequence added in the tree, 0 otherwise
+	trieNodeT* level = T->root;
+	trieNodeTT* levelT = NULL;
+	trieNodeT* locationCharacter;
+	int i = 0;
+	int new_nodes = 0;
+
+	while(i < (alen-1)) {
+	  locationCharacter = characterFound(level->child,array[i]);
+	  if (locationCharacter == NULL) // the character is not yet in this level
+	    {
+	      // Add a new standard node and returns its address:
+	      //printf("Add the node %c into the trie\n",array[i]);
+
+	      if (level->child == NULL) // if we need to create a child
+		{
+		  level->child = TrieAddNode(level->child, array[i]);
+		  level = level->child; // we move to the next generation
+		}
+	      else
+		{
+		  level = TrieAddNode(level->child, array[i]);
+		}
+	      new_nodes++;
+	    }
+	  else
+	    {
+	      level = locationCharacter;
+	    }
+	  i++;
+	}
+
+	// note that in following line, i == (alen-1)
+	locationCharacter = (trieNodeT*)characterFoundTerminal((trieNodeTT*)level->child,array[i]);
+	if (locationCharacter == NULL) // the character is not yet in this level
+	  {
+	    
+	    // Add a new terminal node and returns its address:
+	    //printf("Add the node %c into the trie\n",array[i]);
+	    if (level->child == NULL) // if we need to create a child
+	      {
+		level->child = (trieNodeT*) TrieAddNodeTerminal(NULL,array[i]);
+		levelT = (trieNodeTT*) level->child;
+	      }
+	    else
+	      {
+		levelT = TrieAddNodeTerminal((trieNodeTT*)level->child, array[i]);
+	      }
+	  }
+	else {
+	  levelT = (trieNodeTT*)locationCharacter;
+	}
+
+	// Lets now deal with additing chr, start and strand info to terminal node
+	
+	// We check if it already exists (with a difference in the position, due to genomic variations)
+	// note that on installation levelT->hits is set to 0, so the check should be fine!
+	for (int i=0; i<levelT->hits; i++)
+	  {
+	    if (levelT->chrs[i] == chr && levelT->strands[i] == strand && levelT->starts[i] == start)
+	      {
+		*identical_seq = *identical_seq + 1;
+		return 0;
+	      }
+	  }
+
+	// if all slots of levelT->allocated_array_len have been allocated, we will allocate twice the length.
+	if (levelT->hits == levelT->allocated_array_len) {
+	  levelT->allocated_array_len = levelT->allocated_array_len*2;
+
+	  levelT->chrs = realloc(levelT->chrs, sizeof(int) * (levelT->allocated_array_len));
+	  if (levelT->chrs == NULL)
+	    {
+	      fprintf(stderr,"Failed to allocate memory for %d-th genomic location of gRNA (chrs). Exiting!\n", levelT->hits);
+	      exit(1);
+	    }
+	  levelT->starts = realloc(levelT->starts, sizeof(int) * (levelT->allocated_array_len));
+	  if (levelT->starts == NULL)
+	    {
+	      fprintf(stderr,"Failed to allocate memory for %d-th genomic location of gRNA (starts). Exiting!\n", levelT->hits);
+	      exit(1);
+	    }
+	  levelT->strands = realloc(levelT->strands, sizeof(char) * (levelT->allocated_array_len));
+	  if (levelT->strands == NULL)
+	    {
+	      fprintf(stderr,"Failed to allocate memory for %d-th genomic location of gRNA (strands). Exiting!\n", levelT->hits);
+	      exit(1);
+	    }
+	}
+	levelT->chrs[levelT->hits] = chr;
+	levelT->starts[levelT->hits] = start;
+	levelT->strands[levelT->hits] = strand;
+	levelT->score = score;
+	// printf("Line %d for seq %s:\n",levelT->hits,array);
+	// printf("%d\n",chr);
+	// printf("%d\n",start);
+	// printf("%f\n", score);
+	// printf("%c\n\n",strand);
+	levelT->hits++;
+	// fprintf(stdout,"%d\t%d\t%c\t%s\t%d\n", chr, start, strand, grna, levelT->hits);
+	T->nr_sequences++;
+	
+	if (new_nodes > 0)
+	  {
+	    T->branches++;
+	  }
+	return 1;
+}
+
+
 int TrieMatch(trie *trie, char array[], int alen)
 {
 	// Return the number of exact matches of the sequence taken as argument in the trie
@@ -929,6 +1275,8 @@ mcontainer *TrieAMatch(trie *T, char array[], int alen, int nmis)
 		exit(1);
 	}
 
+	fprintf(stderr,"Array=%s\n",array);
+	
 	// install 4 starting strings for the match container
 	m = mcontainer_install(4, alen);
 	node = T->root->child;
@@ -954,7 +1302,7 @@ mcontainer *TrieAMatch(trie *T, char array[], int alen, int nmis)
 	// printf("Match container installed. Starting to match moving to the depth of trie one position at the time\n\n");
 	while (pos < alen)
 	{
-		// printf("Pos=%d, candidates=%d\n", pos, m->pos);
+	        //fprintf(stdout,"Pos=%d, candidates=%d\n", pos, m->pos);
 		mn = mcontainer_install(m->pos * 4, alen); // for each node already registered, we can have 4 new nodes
 		nelem = 0;
     
@@ -962,31 +1310,37 @@ mcontainer *TrieAMatch(trie *T, char array[], int alen, int nmis)
 		{
 			if (m->nodes[nelem]) // we start from the stored nodes
 			{
-				node = ((trieNodeT*)(m->nodes[nelem]))->child; // the nodes are stored as terminal nodes, here we need the child
+			        node = ((trieNodeT*)(m->nodes[nelem]))->child; // the nodes are stored as terminal nodes, here we need the child
 				while (node != NULL)
-				{
-					// N.B: The casting into a trieNodeT of a terminal node raises issues on the nucleotide character
-					// But the following code is correct
-					if (pos == alen-1)
-					{
-						nodeT = (trieNodeTT*)node;
-						while (nodeT != NULL)
-						{
-							if (array[pos] != nodeT->nt) { mismatch = 1; }
-							else { mismatch = 0; }
-							mcontainer_add_nt(m, mn, nelem, pos, nodeT->nt, mismatch, nmis, nodeT);
-							nodeT = nodeT->brother;
-						}
-						node = NULL;
-					}
-					else
-					{
-						if (array[pos] != node->nt) { mismatch = 1; }
-						else { mismatch = 0; }
-						mcontainer_add_nt(m, mn, nelem, pos, node->nt, mismatch, nmis, (trieNodeTT*)node);
-						node = node->brother;
-					}
-				}
+				  {
+				    // N.B: The casting into a trieNodeT of a terminal node raises issues on the nucleotide character
+				    // But the following code is correct
+				    if (pos == alen-1)
+				      {
+					nodeT = (trieNodeTT*)node;
+					while (nodeT != NULL)
+					  {					    
+					    /*
+					    if (array[pos] != nodeT->nt) { mismatch = 1; }
+					    else { mismatch = 0; }
+					    */
+					    mismatch = baseMismatch(nodeT->nt,array[pos]); // returns 1; if mismatch, 0 otherwise.
+					    mcontainer_add_nt(m, mn, nelem, pos, nodeT->nt, mismatch, nmis, nodeT);
+					    nodeT = nodeT->brother;
+					  }
+					node = NULL;
+				      }
+				    else
+				      {
+					/*
+					if (array[pos] != node->nt) { mismatch = 1; }
+					else { mismatch = 0; }
+					*/
+					mismatch = baseMismatch(node->nt,array[pos]); // returns 1; if mismatch, 0 otherwise.
+					mcontainer_add_nt(m, mn, nelem, pos, node->nt, mismatch, nmis, (trieNodeTT*)node);
+					node = node->brother;
+				      }
+				  }
 			}
 			nelem++;
 		}

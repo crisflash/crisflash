@@ -4,8 +4,6 @@ Crisflash is a tool for rapid design and validation of CRISPR/Cas9 guide RNAs. C
 and for improved validation accuracy thorugh an option of incorporating user-supplied variant data in addition to
 reference genome sequence.
 
-Crisflash is currently supporting only 'NGG' PAM sequence.
-
 ## Getting Started
 
 These instructions will get you a copy of crisflash and provide help for running the tool in your local machine.
@@ -34,11 +32,12 @@ crisflash -g genome.fa -s candidate_sequence.fa -o validated_gRNAs.bed -m 5
 Validates all gRNAs identified in candidate_sequence.fa for off-targets with up to 5 mismatches genome wide for genome sequence in genome.fa.
 Results are saved in validated_gRNAs.bed where gRNA sequence is preserved in 'name' field and off-target validation score in score field.
 
-#### Example 2.
+#### Example 3.
 ```
-crisflash -g genome.fa -@ candidate_gRNAs.bed -o validated_gRNAs.bed
+crisflash -g genome.fa -s candidate_sequence.fa -o validated_gRNAs.cas-offinder -C
 ```
-As Example 1 but here candidate gRNAs are provided in candidate_gRNAs.bed.
+As Example 1 but the output is saved in Cas-OFFinder format. Cas-OFFinder and Crisflash outputs (with option -C) are expected to be identical
+after the outputs from both tools have been sorted. E.g. by linux sort: 'sort -k1,1 -k2,2 -k3,3 file > file.sorted'.
 
 #### Example 3.
 ```
@@ -48,30 +47,43 @@ As Example 1 but here the reference genome sequence in genome.fa is adapted to r
 
 #### Example 4.
 ```
-crisflash -g genome.fa -a genome_gRNAs_dump.bed
+crisflash -g genome.fa -p NNNRYAC -o all_gRNAs.bed
 ```
-Lists and saves all gRNAs found in genome.fa to genome_gRNAs_dump.bed. Note that gRNA positions and sequence reported in
-output are not being validated for off-targets.
+Returns all gRNA sequences in genome for PAM sequence 'NNNRYAC'.
 
 ## Crisflash options
 ```
 -g FILE       FASTA format reference genome.
--b FILE       BED file containing all gRNAs of a genome (the file can be created with -a flag).
 -s FILE       FASTA file containing candidate sequence.
--@ FILE       BED file containing candidate gRNA coordinates and sequences on comment field.
+-p PAM	      PAM sequence. Default: NGG.
 -V FILE       phased VCF file.
 -o FILE       output saved in BED format. 'sequence/exact match count/off-target count' in comment field, off-target score in score field.
--a FILE       output of all gRNAs in a genome in BED format. No validation of off-targets.
--A FILE       output of all gRNAs in a genome in BED format with off-target validation. This takes long time even in multicore mode.
+-B 	      Saves output in BED format, with sequence provided on comment field and off-target score on score field. (Default)
+-C            Saves output in Cas-OFFinder format.
 -m INT        Number of mismatches allowed. Default: 2.
 -t INT        Number of threads to use for off-target validation. Default: 1.
--l    	      Include low complexity areas to off-target validation. Default: use only upper case sequences in soft masked genome.
+-u 	      Excludes low complexity / soft masked genomic sequences (lowercase) from off-target search.
 -h    	      Print help.
 -v    	      Print version.
 ```
+
+## Inputs and outputs
+
+Crisflash inputs for reference genome (option -g) and design target sequence (option -s), are in FASTA format. sgRNAs are designed and matched only against sequences containing standard nucleotide symbols (A,T,G,C,a,t,g,c) are considered. Crisflash memory requirement for human genome with option -u is around ~50GB and ~90GB otherwise.
+
+The tool can be run with either -g or -s option only, resulting in quick identification and print-out of all gRNAs and their location in the sequence with no matching and scoring.
+
+PAM sequence (option -p) may contain any capital IUPAC symbols for nucleotides, hence making the tool universal to any present and future PAM sequences. For example, PAMs such as NGG, NRG, NNNRYAC, NNAGAW are all valid.
+
+Variant information (option -V) is accepted in VCF format with the requirement for the variant file being phased. Internally, phased variants and reference genome are combined in creation of two new improved 'haploid' genomes which are then used for genome-wide scan and indexing of all gRNA sites. In the building / indexing phase, gRNAs of the same locus with identical sequences for both 'haploid genomes' are recorded once. However, should gRNAs of a locus differ in any of the base pairs, two separate gRNAs are being indexed.
+ 
+By default, Crisflash output is provided in BED format and consist of entries to all gRNA candidates identified in the target sequence (provided by option -s). DNA sequences of the candidates are reported on BED file comment field, off-target match scores on score field and reported genomic coordinates correspond to the position of the candidate sequence in the design target sequence, not in the reference genome.
+
+Information about genome-wide matching information of the candidates is available by specifying Crsiflash output in Cas-OFFinder format (option -C). Briefly, the first column in Cas-OFFinder format is for the candidate gRNA sequence with the base pairs part of the PAM being masked by N. The second and third column record the match position of the candidate in the reference genome while the fourth column contains the matched sequence with mismatched bases displayed in lower case. The final two columns are for the chromosome strand and for the number of observed mismatches.
+
 ## Versioning
 
-Crisflash is currently in release 1.0.0. We aim to follow versioning principles described in https://semver.org/.
+Crisflash is currently in release 1.1.0. We aim to follow versioning principles described in https://semver.org/.
 
 ## Authors
 

@@ -29,6 +29,7 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <libgen.h>
 
 #include "nary_tree.h"
 

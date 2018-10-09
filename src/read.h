@@ -28,11 +28,10 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "nary_tree.h"
 
-// #define BUFFER_SIZE (1 * 1024 * 1024) // at least > 23
-#define BUFFER_SIZE 50
+#define BUFFER_SIZE 4096
 #define ITERATIONS (10 * 1024)
-#define LENGTH_SEQ (20)
 #define CHR_NUMBER_MAX 1024
+#define PROTOSPACER_LENGTH 20
 
 /*************************/
 /*      STRUCTURES       */
@@ -45,19 +44,35 @@ typedef int bool;
 // Define structure useful for thread calculations
 struct arg_struct
 {
-	int i;
-	trie* T;
-	int cnt; // counter
-	// For the output line =
-	size_t read; // size of the line
-	char* chrom;
-	char* start;
-	char* end;
-	char* gRNA;
-	char strand;
-	//======================
-	FILE* output;
-	int nr_of_mismatches;
+  int i;
+  trie* T;
+  int cnt; // counter
+  // For the output line =
+  size_t read; // size of the line
+  char* chrom;
+  char* start;
+  char* end;
+  char* gRNA;
+  char strand;
+  //======================
+  FILE* output;
+  int nr_of_mismatches;
+  int free;
+};
+
+struct arg_structN
+{
+  int i;
+  trie* T;
+  int maxMismatch;
+  int free;
+  FILE *outfh;
+  int outFileType;
+  char *grna;
+  char *chr;
+  long long start;
+  long long end;
+  char strand;
 };
 
 /*************************/
@@ -71,18 +86,20 @@ void print_seq(char *seq, int len);
 void writeInBed(FILE* f, mcontainer *m, char* gRNA, trie* T, int scoreFlag);
 void writeInBed_lighter(FILE* f, mcontainer *m, char* chrom, char* start, char* end, char* gRNA, char strand, trie* T);
 int newPAM(char* buffer, int x, int bytes_read, int upper_case_only);
+void readFaToTrieNEW(trie *T, char *genomefname, char *pam, char* outputfname, int append, int upper_case_only, int printGRNAs);
 void readFaToTrie(trie* T, char *fname, char* outputName, int append);
 void readFaToTrie_UpperCaseOnly(trie* T, char *fname, char* outputName, int append);
 trie *readFaToTrie_VCF(char *fname, char *vcfName, char* outputName);
 int check_var(VCF* vcf, int chr_pos, char* buffer, int x, char* chr);
 char* compute_seq(VCF** vcf, int pt_vcf, int chr_pos, char* buffer, int x);
-trie* Bed2Trie(char* fname);
 int countLines(char* fname);
-void TrieAMatchItself(trie* T, int maxMismatch, char* outputName, char* outputMatchResult);
+void TrieAMatchItself(trie* T, int maxMismatch, char* outputName, char* outputMatchResult, int outFileType, char *pam);
 void *thread_worker(void *arg);
-void TrieAMatchItself_thread(trie *T, int maxMismatch, char* outputName, char* outputMatchResult, int nr_of_threads);
-void TrieAMatchSequence(trie* T, char* fname, int maxMismatch, char* outputName);
-void TrieAMatchSequence_thread(trie* T, char* fname, int maxMismatch, char* outputName, int nr_of_threads);
+void TrieAMatchItself_thread(trie *T, int maxMismatch, char* outputName, char* outputMatchResult, int outFileType, int nr_of_threads, char *pam);
+void TrieAMatchSequence(trie* T, char* fname, int maxMismatch, char* outputName, int outFileType, char *pam);
+void TrieAMatchSequenceNEW(trie* T, char* fname, int maxMismatch, char* outputName, int outFileType, char *pam, int upper_case_only);
+void TrieAMatchSequence_thread(trie* T, char* fname, int maxMismatch, char* outputName, int outFileType, int nr_of_threads, char *pam);
+void TrieAMatchSequenceNEWThreads(trie* T, char* fname, int maxMismatch, char* outputName, int outFileType, char *pam, int upper_case_only, int threads, int printOnly);
 int ClientServer(char* sequencePath, int maxMismatch, int nr_of_threads);
 
 #endif

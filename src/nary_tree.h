@@ -42,7 +42,8 @@ typedef struct trieNodeTag
 typedef struct trieNodeTerminal
 {
 	struct trieNodeTerminal *brother; // a trieNodeTT can still have a brother
-	int hits; // number of hits
+        int allocated_array_len; //
+        int hits; // number of hits (nr of elements in chrs, strands and starts)
 	int *chrs; // array of chromosome names
 	char *strands; // array of strands
 	int *starts; // array of start positions
@@ -130,6 +131,7 @@ int addChr(trie* T, char* chrname, int namelen);
 trieNodeT* characterFound(trieNodeT* level, char nt);
 trieNodeTT* characterFoundTerminal(trieNodeTT* levelT, char nt);
 int TrieAdd(trie* T, char* array, int alen, int chr, char strand, int start, float score, int* identical_seq);
+int TrieAddNEW(trie* T, char* array, int alen, int chr, char strand, int start, float score, int* identical_seq);
 int TrieMatch(trie *trie, char array[], int alen);
 mcontainer *TrieAMatch(trie *T, char array[], int alen, int nmis);
 int TrieAMatchSummary(trie *T, char array[], int alen, int nmis);
