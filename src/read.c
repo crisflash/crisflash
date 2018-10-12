@@ -988,6 +988,11 @@ void writeInBed_lighter(FILE* f, mcontainer *m, char* chrom, long long start, lo
 	nr_of_off_targets += m->nodes[i]->hits;
       }
     }
+  // safety net in case candidate gRNA had 0 exact matches. No exact matches is currently screwing up the scoring formula and the score
+  // returned may be out of 0 to 1 bounds. Henece replacing such score with 0.
+  if(nr_of_exact_matches == 0) {
+    m->score = 0;
+  }
   fprintf(f, "%s\t%lld\t%lld\t%s/%d/%d\t%f\t%c\n", chrom, start, end, gRNA, nr_of_exact_matches, nr_of_off_targets, m->score, strand);
 }
 
