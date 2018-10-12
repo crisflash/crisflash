@@ -70,7 +70,6 @@ static int usage()
   fprintf(stderr, "\n");
   fprintf(stderr, "Program: crisflash (A tool for CRISPR/Cas9 sgRNA design and off-target validation)\n");
   fprintf(stderr, "Version: %s\n\n", CRISFLASH_VERSION);
-  //fprintf(stderr, "Usage:   crisflash (-g <genome.fa> | -b <genome_sgRNAs.bed>) [options] \n\n");
   fprintf(stderr, "Usage:   crisflash -g <genome.fa> -s <input.fa> -o <output> [options]\n\n");
   fprintf(stderr, "Options:\n");
   /* input file option for reference genome */
@@ -79,18 +78,16 @@ static int usage()
   fprintf(stderr, "          -s FILE\tFASTA file containing candidate sequence.\n"); /* input sequence */
   fprintf(stderr, "          -p PAM\tPAM sequence. Default: NGG\n");
   fprintf(stderr, "          -V FILE\tphased VCF file.\n"); /* vcf file */  
-  /* output file options NEW*/
+  /* boolean options for output file format */
   /*
     -B bam output
     -C cas-offinder output
   */
   fprintf(stderr, "          -B\t\t save output in BED format, with sequence provided on comment field and off-target score on score field. (Default)\n");
   fprintf(stderr, "          -C\t\t save output in cas-offinder format.\n");
-  /* output file options */
+  /* output file name */
   fprintf(stderr, "          -o FILE\toutput file name saved in BED format.\n");
-  // fprintf(stderr, "          -a FILE\toutput of all gRNAs. (Assumes flag -B)\n");
-  //fprintf(stderr, "          -A FILE\toutput of all gRNAs in a genome in BED format with off-target validation. (NB! takes long time even with -t option)\n");
-  /* parameter options */
+  /* options for parameters */
   fprintf(stderr, "          -m INT\tNumber of mismatches allowed. Default: 2.\n");
   fprintf(stderr, "          -t INT\tNumber of threads for off-target scoring. Default: 1.\n");
   fprintf(stderr, "          -u\tExclude low complexity genomic sequences marked lowercase in soft masked genomes.\n");
@@ -133,26 +130,12 @@ int main(int argc, char **argv)
 	// default PAM sequence is 'NGG'
 	char * pam =  malloc(sizeof(char)*4);			     
 	strcpy(pam,"NGG");
-	
-	char *allsgRNAsFile = NULL;
-
+	       
 	// while ((c = getopt(argc, argv, "g:b:o:s:v:m:@:it:lS:h")) != -1)
 	while ((c = getopt(argc, argv, "BCg:o:s:vV:m:t:lhp:")) != -1)
 	  {
 	    switch (c)
-	      {
-		/*
-	      case 'a':
-		//if (string_ends_with(optarg,".bed")) { allsgRNAsFile = optarg; }
-		// else { allsgRNAsFile = add_suffix(optarg,".bed"); }
-		allsgRNAsFile = optarg;
-                break;
-	      case 'A':		
-		if (string_ends_with(optarg,".bed")) { outFile = optarg; }
-		else { outFile = add_suffix(optarg,".bed"); }
-		matchItselfPathBool = 1;
-		break;
-		*/
+	      {		
 	      case 'g':
 		file_accessible(optarg, R_OK);
 		if (string_ends_with(optarg,".fa")) { referenceGenomePath = optarg; }
@@ -161,21 +144,8 @@ int main(int argc, char **argv)
 		  exit(1);
 		}
 		break;
-		/*
-	      case 'b':
-		if (string_ends_with(optarg,".bed")) { bedFilePath = optarg; }
-		else {
-		  fprintf(stderr,"[crisflash] ERROR: file does not appear to be bed file (.bed).\n");
-		  exit(1);
-		}
-		break;
-		*/
 	      case 'o':
 		outFile = optarg;
-		/*
-		if (string_ends_with(optarg,".bed")) { outFile = optarg; }
-		else { outFile = add_suffix(optarg,".bed"); }
-		*/
 		break;
 	      case 's':
 		file_accessible(optarg, R_OK);
@@ -193,14 +163,6 @@ int main(int argc, char **argv)
 		}
 		vcfPath = optarg;
 		break;
-		/*
-	      case '@':
-		file_accessible(optarg, R_OK);
-		if (string_ends_with(optarg,".bed")) { bedCandidatesPath = optarg; }
-		else { bedCandidatesPath = add_suffix(optarg,".bed"); }
-		inputMatchItselfBool = 1;
-		break;
-		*/
 	      case 'm':
 		maxMismatch = atoi(optarg);
 		break;
@@ -209,7 +171,7 @@ int main(int argc, char **argv)
 		nr_of_threads = atoi(optarg);
 		break;
 	      case 'u':
-		upper_case_only = 1; // This means we will search in lower case sequences as well
+		upper_case_only = 1; // When set to 1 lower case / low complexity sequences in soft masked genome are ignored.
 		break;
 	      case 'h':
 		usage();
@@ -219,11 +181,11 @@ int main(int argc, char **argv)
 		exit(0);
 		break;
 	      case 'B':
-		/* Set output filetype BED */
+		/* Set output file type BED */
 		outFileType = 1;
 		break;
 	      case 'C':
-		/* Set output filetype cas-offinder */
+		/* Set output file type cas-offinder */
 		outFileType = 2;
 		break;
 	      case 'p':
@@ -242,15 +204,16 @@ int main(int argc, char **argv)
 		  }
 		return 1;
 	      default:
+		fprintf(stderr, "[crisflash] ERROR: Unknown option '-%c'\n", c);
 		exit(1);
 	      }
 	  }
 	
-	// check that at least 2 arguments have been provided: minimum one for fasta sequene and one for output
+	// We need values for at least two arguments.
 	int acount = 0; 
 	while(argv[++acount] != NULL);
 	if (acount == 2) {
-	  usage();	  
+	  usage();
 	}
 	for (index = optind; index < argc; index++)
 	  {
@@ -258,33 +221,36 @@ int main(int argc, char **argv)
 	    exit(1);
 	  }
 
-	// if no reference genome or input sequence, display help which also causes the program to exit
+	// if no reference genome or input sequence, display help and exit
 	if ((!referenceGenomePath)&&(!sequencePath)) {
 	  usage();
 	  exit(1);
 	}
 
-	// if no output file, then 
+	// if output file had not been set, display help and exit.
 	if (!outFile) {
 	  usage();
 	  exit(1);
 	}
 
-	// if either referenceGenome or sequence path then print all gRNA candidates.
+	/*
+	  If values for only referenceGenome or sequence path, print all gRNA candidates and exit.
+	  No need to build Trie and match candidates.
+	*/
 	if((referenceGenomePath)&&(!sequencePath)) {
-	  readFaToTrieNEW(T, referenceGenomePath, pam, allsgRNAsFile, 0, upper_case_only,1);
+	  readFaToTrie(T, referenceGenomePath, pam, outFile, 0, upper_case_only,1);
 	  exit(0);
 	}
 	if((!referenceGenomePath)&&(sequencePath)) {
-	  readFaToTrieNEW(T, sequencePath, pam, allsgRNAsFile, 0, upper_case_only,1);
+	  readFaToTrie(T, sequencePath, pam, outFile, 0, upper_case_only,1);
 	  exit(0);
 	}
 
-	// Both referene genome and sequence for target area must have been provided. We will index reference genome to Trie.
+	// We have values for referene genome and sequence for target area. Therefore, we will index reference genome to Trie!
 	T = TrieCreate(PROTOSPACER_LENGTH + strlen(pam));
 	
 	if (!vcfPath) {
-	  readFaToTrieNEW(T, referenceGenomePath, pam, allsgRNAsFile, 0, upper_case_only,0);
+	  readFaToTrie(T, referenceGenomePath, pam, outFile, 0, upper_case_only,0);
 	}
 	else {
 	  // variant data has been provided. We create haplotype based genomic sequences first and load them to Trie one by one.
@@ -300,47 +266,26 @@ int main(int argc, char **argv)
 	  strcat(output_VCF2,vcfPath);
 	  strcat(output_VCF1,"1.fa");
 	  strcat(output_VCF2,"2.fa");
-	  printf("[crisflash] Creating phased genomes for %s.\n", vcfPath);
+	  fprintf(stdout,"[crisflash] Creating phased genomes for %s.\n", vcfPath);
 	  phased = VCF_to_genome(referenceGenomePath, vcfPath, output_VCF1, output_VCF2);
 	  // printf("============== 1st HAPLOTYPE ==============\n");
-	  // readFaToTrie_UpperCaseOnly(T, output_VCF1, allsgRNAsFile, append);
-	  readFaToTrieNEW(T, output_VCF1, pam, allsgRNAsFile, append, upper_case_only,0);
+	  readFaToTrie(T, output_VCF1, pam, outFile, append, upper_case_only,0);
 	  if (phased == 1)
 	    {
 	      // printf("============== 2nd HAPLOTYPE ==============\n");
 	      append += T->nr_sequences;
-	      // readFaToTrie_UpperCaseOnly(T, output_VCF2, allsgRNAsFile, append); // we add haplotype 2
-	      readFaToTrieNEW(T, output_VCF2, pam, allsgRNAsFile, append, upper_case_only,0);
+	      readFaToTrie(T, output_VCF2, pam, outFile, append, upper_case_only,0);
 	    }
 	  free(output_VCF1);
 	  free(output_VCF2);
 	}	  
 	
-	fprintf(stdout,"[crisflash] Ready to process candidates.\n");
-	fflush(stdout);
-	
-	
-	/* Identify candidate sgRNAs and score off-targets */
-	/*
-	if (bedCandidatesPath) {
-	  if (threadFlag) {
-	    TrieAMatchItself_thread(T, maxMismatch, bedCandidatesPath, outFile, outFileType, nr_of_threads, pam);
-	  }
-	  else {
-	    TrieAMatchItself(T, maxMismatch, bedCandidatesPath, outFile, outFileType, pam);
-	  }
-	}
-	*/
+	TrieAMatchSequenceThreads(T, sequencePath, maxMismatch, outFile, outFileType, pam, upper_case_only, nr_of_threads,0);
 
-	if (sequencePath) {
-	  TrieAMatchSequenceNEWThreads(T, sequencePath, maxMismatch, outFile, outFileType, pam, upper_case_only, nr_of_threads,0);
-	}
-	
-	// We will not free memory from the trie as the process is slow and the block of memory will be handed back to OS on exit anyway
+	// We will not free Trie as the process is slow and the block of memory will be handed back to OS on exit anyway.
 	/*
 	  T = TrieDestroy(T);
 	  free(pam);
-	  if(allsgRNAsFile) { free(allsgRNAsFile); }
 	  if(bedCandidatesPath) { free(bedCandidatesPath); }
 	  if(outFile) { free(outFile); }
 	*/

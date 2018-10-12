@@ -37,7 +37,7 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 /***************************************
-          CONTAINER FONCTIONS
+          BASE MATCHING FUNCTIONS
 ***************************************/
 
 int baseMismatch(char seqnt, char pamnt) {
@@ -265,14 +265,18 @@ int baseMismatch(char seqnt, char pamnt) {
 	}
       break;
     default:
-      fprintf(stderr,"Error! '%c' part of PAM sequence not a valid nucleotide\n", pamnt);
+      fprintf(stderr,"[crisflash] ERROR: '%c' part of PAM sequence not a valid nucleotide\n", pamnt);
       exit(1);
     }
 }
 
+/***************************************
+      MATCHING CONTAINER FONCTIONS
+***************************************/
 
 mcontainer* mcontainer_install(int nelem, int calen)
 {
+  /* Installs mcontainer to keep track of gRNA matching information */
 	mcontainer *m = malloc(sizeof(struct mcontainer));
 	m->nodes = malloc( sizeof(trieNodeTT*) * nelem);
 	m->sarray = malloc( sizeof(char**) * nelem);
@@ -290,6 +294,7 @@ mcontainer* mcontainer_install(int nelem, int calen)
 
 void mcontainer_free(mcontainer *m)
 {
+  /* Frees mcontainer. */
 	int i = 0;
 
 	while(i < m->pos)
@@ -311,31 +316,30 @@ void mcontainer_free(mcontainer *m)
 	free(m->nodes);
 	free(m->marray);
 	free(m->parray);
-
-	// fprintf(stdout,"Freeing m\n");
 	free(m);
-	// fprintf(stdout,"Freeing M completed!\n");
 }
 
 int mcontainer_add_str(mcontainer *m, int slen)
 {
-	// Returns the position in m->sarray where the char array with length slen was created.
-	char *seq = malloc(sizeof(char)*(slen+1));
-	seq[slen] = '\0';
-	m->sarray[m->pos] = seq;
-	m->marray[m->pos] = 1;
-	m->pos++;
-	return m->pos-1 ;
+  // Returns the position in m->sarray where the char array with length slen was created.
+  char *seq = malloc(sizeof(char)*(slen+1));
+  seq[slen] = '\0';
+  m->sarray[m->pos] = seq;
+  m->marray[m->pos] = 1;
+  m->pos++;
+  return m->pos-1 ;
 }
 
 void mcontainer_add_nt(mcontainer *m, mcontainer *m_new, int mpos, int seqpos, char nt, int mismatch, int max_mismatches, trieNodeTT* nodeT)
 {
-	// Creates new character array for a particular character array in m->sarray[mpos] and adds new nt to it.
-	// mpos is the position of sequence in m sarray
-	// seqpos is position of char in seq array
-	// nt is the char to be added to a character array
-	// mismatch: 0 if no mismatch, 1 otherwise.
-	char *seq;
+  /*
+    Creates new character array for a particular character array in m->sarray[mpos] and adds new nt to it.
+    mpos is the position of sequence in m sarray
+    seqpos is position of char in seq array
+    nt is the char to be added to a character array
+    mismatch: 0 if no mismatch, 1 otherwise.
+  */
+        char *seq;
 
 	if(m_new->pos >= m_new->nelem)
 	{
@@ -379,17 +383,18 @@ void mcontainer_add_nt(mcontainer *m, mcontainer *m_new, int mpos, int seqpos, c
 
 void mcontainer_print(mcontainer *m)
 {
+  /* Prints the content of match container. */
 	int i = 0;
 	char *seq;
 	while(i < m->pos)
 	{
 		seq = m->sarray[i];
-		fprintf(stdout,"%s\t[",seq);
+		fprintf(stdout,"%s\t[",seq);		
 		int j = 0;
 		while (j < m->marray[i]-1)
 		{
-			fprintf(stdout,"%d,", m->parray[i][j]);
-			j++;
+		  fprintf(stdout,"%d,", m->parray[i][j]);
+		  j++;
 		}
 		if (m->marray[i] > 0) { fprintf(stdout,"%d]\t", m->parray[i][j]); }
 		else { fprintf(stdout,"]\t"); }
@@ -401,7 +406,7 @@ void mcontainer_print(mcontainer *m)
 
 void mcontainer_print_pretty(mcontainer *m, int mismatches)
 {
-	// Print the number of gRNAs for each number of mismatches
+  /* Prints the number of gRNAs for each number of mismatches */
 	int i = 0;
 	int *matches = malloc(sizeof(int) * (mismatches+1));
 
@@ -496,6 +501,7 @@ void mcontainer_score(mcontainer *m, trie* T)
 
 VCF* VCF_install(FILE* f_vcf)
 {
+  /* Installs VCF struct. */
 	VCF* vcf = malloc(sizeof(struct VCF));
 	char* line = NULL;
 	char *str, *ref, *alt, *hap;
@@ -536,6 +542,7 @@ VCF* VCF_install(FILE* f_vcf)
 
 void VCF_destroy(VCF* vcf)
 {
+  /* Frees VCF struct. */
 	if (vcf)
 	{
 		if (vcf->chr) { free(vcf->chr); }
@@ -548,6 +555,7 @@ void VCF_destroy(VCF* vcf)
 
 int VCF_update(FILE* f_vcf, VCF* vcf)
 {
+  /* Updates VCF struct. */
 	/* First we delete the old data */
 	free(vcf->chr);
 	free(vcf->ref);
@@ -596,6 +604,7 @@ int VCF_update(FILE* f_vcf, VCF* vcf)
 
 void VCF_print(VCF* vcf)
 {
+  /* Prints VCF struct. */
 	if (vcf)
 	{
 		fprintf(stdout, "VCF line: chr=%s\tpos=%d\tub=%d\tref=%s\talt=%s\thap=%s\n", vcf->chr, vcf->pos, vcf->ub, vcf->ref, vcf->alt, vcf->hap);
@@ -605,7 +614,7 @@ void VCF_print(VCF* vcf)
 
 VCF* VCF_copy(VCF* vcf)
 {
-	// Return the copy of vcf
+  /* Returns copy of the vcf struct */
 	VCF* vcf2 = malloc(sizeof(struct VCF));
 	vcf2->chr = malloc(sizeof(char)*(strlen(vcf->chr)+1));
 	vcf2->ref = malloc(sizeof(char)*(strlen(vcf->ref)+1));
@@ -622,12 +631,12 @@ VCF* VCF_copy(VCF* vcf)
 }
 
 /**************************
-       TRIE FONCTIONS
+       TRIE FUNCTIONS
 **************************/
 
 trieNodeT* TrieCreateNode(char nt)
 {
-	// create a trieNodeT
+	// Adds node to trieNodeT
 	trieNodeT* a = (trieNodeT*) malloc(sizeof(trieNodeT));
 	a->brother = NULL;
 	a->child = NULL;
@@ -637,6 +646,7 @@ trieNodeT* TrieCreateNode(char nt)
 
 trieNodeTT* TrieCreateNodeTerminal(char nt)
 {
+  /* Adds terminal node to Trie. */
 	trieNodeTT* a = (trieNodeTT*) malloc(sizeof(trieNodeTT));
 	a->allocated_array_len=10;
 	a->chrs = malloc(sizeof(int)*a->allocated_array_len);
@@ -963,136 +973,7 @@ trieNodeTT* characterFoundTerminal(trieNodeTT* levelT, char nt)
 	return NULL;
 }
 
-
 int TrieAdd(trie* T, char* array, int alen, int chr, char strand, int start, float score, int* identical_seq)
-{
-	// Take as arguments a trie, a sequence, the length of this sequence, the chr number,
-	// the strand (+,- or *), the start position, the score (default = 0) and the vcf structure
-	// Return 1 if sequence added in the tree, 0 otherwise
-	trieNodeT* level = T->root;
-	trieNodeTT* levelT = NULL;
-	trieNodeT* locationCharacter;
-	int i = 0;
-	int new_nodes = 0;
-
-	while(i < alen) // while we havn't reach the end of the sequence
-	{
-		// we have to see if we find array[i] in the next generation
-		if (i == (alen-1) )
-		{
-			locationCharacter = (trieNodeT*)characterFoundTerminal((trieNodeTT*)level->child,array[i]);
-		}
-		else
-		{
-			locationCharacter = characterFound(level->child,array[i]);
-		}
-
-		if (locationCharacter == NULL) // the character is not yet in this level
-		{
-			if (i == (alen-1) )
-			{
-				// Add a new terminal node and returns its address:
-				//printf("Add the node %c into the trie\n",array[i]);
-				if (level->child == NULL) // if we need to create a child
-				{
-					level->child = (trieNodeT*) TrieAddNodeTerminal(NULL,array[i]);
-					levelT = (trieNodeTT*) level->child;
-				}
-				else
-				{
-					levelT = TrieAddNodeTerminal((trieNodeTT*)level->child, array[i]);
-				}
-			}
-			else
-			{
-				// Add a new standard node and returns its address:
-				//printf("Add the node %c into the trie\n",array[i]);
-				if (level->child == NULL) // if we need to create a child
-				{
-					level->child = TrieAddNode(level->child, array[i]);
-					level = level->child; // we move to the next generation
-				}
-				else
-				{
-					level = TrieAddNode(level->child, array[i]);
-				}
-			}
-			new_nodes++;
-		}
-		else
-		{
-			// the character already exists
-			//printf("The node %c already exists\n",array[i]);
-			if (i == (alen-1) )
-			{
-				levelT = (trieNodeTT*)locationCharacter;
-			}
-			else
-			{
-				level = locationCharacter;
-			}
-		}
-		i++;
-	}
-	// add chr, strand, and start info to the terminal node
-	if (levelT->hits == 0)
-	{
-		levelT->chrs = malloc(sizeof(int));
-		levelT->starts = malloc(sizeof(int));
-		levelT->strands = malloc(sizeof(char));
-	}
-	else
-	{
-		// We check if it already exists (with a difference in the position, due to genomic variations)
-		for (int i=0; i<levelT->hits; i++)
-		{
-			if (levelT->chrs[i] == chr && levelT->strands[i] == strand && levelT->starts[i] == start)
-			{
-				*identical_seq = *identical_seq + 1;
-				return 0;
-			}
-		}
-
-		levelT->chrs = realloc(levelT->chrs, sizeof(int) * (levelT->hits + 1));
-		if (levelT->chrs == NULL)
-		{
-			fprintf(stderr,"Failed to allocate memory for %d-th genomic location of gRNA (chrs). Exiting!\n", levelT->hits);
-			exit(1);
-		}
-		levelT->starts = realloc(levelT->starts, sizeof(int) * (levelT->hits + 1));
-		if (levelT->starts == NULL)
-		{
-			fprintf(stderr,"Failed to allocate memory for %d-th genomic location of gRNA (starts). Exiting!\n", levelT->hits);
-			exit(1);
-		}
-		levelT->strands = realloc(levelT->strands, sizeof(char) * (levelT->hits + 1));
-		if (levelT->strands == NULL)
-		{
-			fprintf(stderr,"Failed to allocate memory for %d-th genomic location of gRNA (strands). Exiting!\n", levelT->hits);
-			exit(1);
-		}
-		fflush(stderr);
-	}
-	levelT->chrs[levelT->hits] = chr;
-	levelT->starts[levelT->hits] = start;
-	levelT->strands[levelT->hits] = strand;
-	levelT->score = score;
-	// printf("Line %d for seq %s:\n",levelT->hits,array);
-	// printf("%d\n",chr);
-	// printf("%d\n",start);
-	// printf("%f\n", score);
-	// printf("%c\n\n",strand);
-	levelT->hits++;
-	T->nr_sequences++;
-
-	if (new_nodes > 0)
-	{
-		T->branches++;
-	}
-	return 1;
-}
-
-int TrieAddNEW(trie* T, char* array, int alen, int chr, char strand, int start, float score, int* identical_seq)
 {
   /* This function is 30% faster compared to TrieAdd. With hg38.fa -l being 30% compared to TrieAdd (i.e. 20m vs 30m). */
   
@@ -1135,7 +1016,7 @@ int TrieAddNEW(trie* T, char* array, int alen, int chr, char strand, int start, 
 	if (locationCharacter == NULL) // the character is not yet in this level
 	  {
 	    
-	    // Add a new terminal node and returns its address:
+	    // Add a new terminal node and return its address:
 	    //printf("Add the node %c into the trie\n",array[i]);
 	    if (level->child == NULL) // if we need to create a child
 	      {
@@ -1275,7 +1156,7 @@ mcontainer *TrieAMatch(trie *T, char array[], int alen, int nmis)
 		exit(1);
 	}
 
-	fprintf(stderr,"Array=%s\n",array);
+	// fprintf(stderr,"Array=%s\n",array);
 	
 	// install 4 starting strings for the match container
 	m = mcontainer_install(4, alen);

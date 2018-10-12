@@ -124,14 +124,11 @@ void TrieRemoveBrotherNodes(trieNodeT* n, int depth, int readlen);
 trieNodeT* TrieRemoveNode(trieNodeT* n, int depth, int readlen);
 trie* TrieCreate(int readlen);
 void displayTrie(trie* T);
-//char* computeLine(trieNodeT* level, char* line, int* lineIndex, int depth, int readlen);FIXME
-//void displayTriePretty(trie* T);FIXME
 trie* TrieDestroy(trie* T);
 int addChr(trie* T, char* chrname, int namelen);
 trieNodeT* characterFound(trieNodeT* level, char nt);
 trieNodeTT* characterFoundTerminal(trieNodeTT* levelT, char nt);
 int TrieAdd(trie* T, char* array, int alen, int chr, char strand, int start, float score, int* identical_seq);
-int TrieAddNEW(trie* T, char* array, int alen, int chr, char strand, int start, float score, int* identical_seq);
 int TrieMatch(trie *trie, char array[], int alen);
 mcontainer *TrieAMatch(trie *T, char array[], int alen, int nmis);
 int TrieAMatchSummary(trie *T, char array[], int alen, int nmis);

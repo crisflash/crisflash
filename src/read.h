@@ -41,27 +41,43 @@ typedef int bool;
 #define true 1
 #define false 0
 
-// Define structure useful for thread calculations
+typedef struct faread_struct
+{
+  /*
+    The struct is used for reading fasta file one sequence at the time.
+    Used by installFastaReader, fastaReader and freed by freeFastaReader.
+  */
+  long long limit; // maximul length allocated for s and sr at any time
+  char *s; // fasta sequence '+' strand
+  char *sr; // fasta sequence '-' strand
+  long long slen; // string length for s and sr
+  int fd; // fasta file handler
+  char * buffer; // read buffer, limited to BUFFER_SIZE
+  ssize_t bytes_read; // nr of bytes in read buffer
+  int i; // character position in read buffer
+  char *header; // fasta header, limited to BUFFER_SIZE
+  int fasta_header; // 1 if read character is from sequence, 0 otherwise.
+  int headerlen; // length of the fasta header
+  int nrheaders; // nr of sequences read so far
+  int alive; // 1 - if file has not yet reached its end, 0 otherwise.
+  int sequence; // 1 - if fasta sequence was read, 0 otherwise.
+  int no_low_complexity; // 1 if no low complexity sequence, 0 otherwise.
+} faread_struct;
+
+typedef struct grna_list {
+  /* The struct is used for storing list of gRNA start positions */
+  char *pstrand; // pointer to forward strand of fasta sequence
+  char *nstrand; // pointer to reverse strand of fasta sequence (translation from forward)
+  char *chr; // chromosome name
+  long long length; // number of space/positions allocatd for gRNAs
+  long long pos; // nr of gRNas
+  long long *starts; // array of gRNA start positions
+  char *strands; // array of gRNA strands
+} grna_list;
+
 struct arg_struct
 {
-  int i;
-  trie* T;
-  int cnt; // counter
-  // For the output line =
-  size_t read; // size of the line
-  char* chrom;
-  char* start;
-  char* end;
-  char* gRNA;
-  char strand;
-  //======================
-  FILE* output;
-  int nr_of_mismatches;
-  int free;
-};
-
-struct arg_structN
-{
+  /* The struct is used for passing arguments to thread worker responsible for matching gRNA candidate in Trie. */
   int i;
   trie* T;
   int maxMismatch;
@@ -76,30 +92,11 @@ struct arg_structN
 };
 
 /*************************/
-/*      FONCTIONS        */
+/*      FUNCTIONS        */
 /*************************/
 
 double now();
-char *invSeq(char* seq, int pos, int slen, int bytes_read, int upper_case_only);
-char *fSeq(char* seq, int pos, int slen, int upper_case_only);
-void print_seq(char *seq, int len);
-void writeInBed(FILE* f, mcontainer *m, char* gRNA, trie* T, int scoreFlag);
-void writeInBed_lighter(FILE* f, mcontainer *m, char* chrom, char* start, char* end, char* gRNA, char strand, trie* T);
-int newPAM(char* buffer, int x, int bytes_read, int upper_case_only);
-void readFaToTrieNEW(trie *T, char *genomefname, char *pam, char* outputfname, int append, int upper_case_only, int printGRNAs);
-void readFaToTrie(trie* T, char *fname, char* outputName, int append);
-void readFaToTrie_UpperCaseOnly(trie* T, char *fname, char* outputName, int append);
-trie *readFaToTrie_VCF(char *fname, char *vcfName, char* outputName);
-int check_var(VCF* vcf, int chr_pos, char* buffer, int x, char* chr);
-char* compute_seq(VCF** vcf, int pt_vcf, int chr_pos, char* buffer, int x);
-int countLines(char* fname);
-void TrieAMatchItself(trie* T, int maxMismatch, char* outputName, char* outputMatchResult, int outFileType, char *pam);
-void *thread_worker(void *arg);
-void TrieAMatchItself_thread(trie *T, int maxMismatch, char* outputName, char* outputMatchResult, int outFileType, int nr_of_threads, char *pam);
-void TrieAMatchSequence(trie* T, char* fname, int maxMismatch, char* outputName, int outFileType, char *pam);
-void TrieAMatchSequenceNEW(trie* T, char* fname, int maxMismatch, char* outputName, int outFileType, char *pam, int upper_case_only);
-void TrieAMatchSequence_thread(trie* T, char* fname, int maxMismatch, char* outputName, int outFileType, int nr_of_threads, char *pam);
-void TrieAMatchSequenceNEWThreads(trie* T, char* fname, int maxMismatch, char* outputName, int outFileType, char *pam, int upper_case_only, int threads, int printOnly);
-int ClientServer(char* sequencePath, int maxMismatch, int nr_of_threads);
+void readFaToTrie(trie *T, char *genomefname, char *pam, char* outputfname, int append, int upper_case_only, int printGRNAs);
+void TrieAMatchSequenceThreads(trie* T, char* fname, int maxMismatch, char* outputName, int outFileType, char *pam, int upper_case_only, int threads, int printOnly);
 
 #endif

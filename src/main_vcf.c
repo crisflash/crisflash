@@ -36,13 +36,13 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 static int vcf_usage()
 {  
   fprintf(stderr, "\n");
-  fprintf(stderr, "Program: vcf\n");
+  fprintf(stderr, "Program: crisflashVcf\n");
   fprintf(stderr, "Description: Returns one or two genome sequences constructed by overlaying\n");
   fprintf(stderr, "             the reference sequence with variant data provided in VCF file.\n");
   fprintf(stderr, "             The number of output files depends on whether the VCF file is phased:\n");
   fprintf(stderr, "             two files (one per haplotype) for phased VCF and one file otherwise.\n");
   fprintf(stderr, "Version: %s\n", CRISFLASH_VERSION);
-  fprintf(stderr, "Usage:   vcf -g <genome.fa> -v <variants.vcf> [options] \n");
+  fprintf(stderr, "Usage:   crisflashVcf -g <genome.fa> -v <variants.vcf> [options] \n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "          -g FILE\tFASTA format reference genome.\n");
   fprintf(stderr, "          -v FILE\tVCF file.\n"); /* vcf file */
@@ -80,11 +80,11 @@ int main(int argc, char **argv)
 		case '?':
 			if (isprint(optopt))
 			{
-				fprintf(stderr, "WARNING: Unknown option `-%c'.\n", optopt);
+			  fprintf(stderr, "[crisflashVcf] WARNING: Unknown option `-%c'.\n", optopt);
 			}
 			else
 			{
-				fprintf(stderr, "WARNING: Unknown option character `\\x%x'.\n", optopt);
+			  fprintf(stderr, "[crisflashVcf] WARNING: Unknown option character `\\x%x'.\n", optopt);
 			}
 			return 1;
 		default:
@@ -94,11 +94,11 @@ int main(int argc, char **argv)
 
 	for (index = optind; index < argc; index++)
 	{
-		printf ("\n\nERROR: Non-option argument %s\n", argv[index]);
+		printf ("\n\n[crisflashVcf] ERROR: Non-option argument %s\n", argv[index]);
 	}
 	if (!vcfPath || !referenceGenomePath)
 	{
-	  fprintf(stderr,"\n\nERROR: either reference genome ( -g genome.fa ) or VCF file (-v var.vcf) not provided!\n\n\n");
+	  fprintf(stderr,"\n\n[crisflashVcf] ERROR: either reference genome ( -g genome.fa ) or VCF file (-v var.vcf) not provided!\n\n\n");
 	  vcf_usage();
 	  exit(1);
 	}
@@ -111,7 +111,7 @@ int main(int argc, char **argv)
 	  strcat(prefixName,"_");
 	  strcat(prefixName,vbasename);
 	}
-	fprintf(stderr,"Using output prefix '%s'\n", prefixName);
+	fprintf(stdout,"[crisflashVcf] Using output prefix '%s'\n", prefixName);
 
 	int phased;
 	char *genome1 = malloc(sizeof(char)*strlen(prefixName) + 5);

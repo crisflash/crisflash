@@ -23,7 +23,7 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 #define DEF_VCF
 
 #ifndef CRISFLASH_VERSION
-#define CRISFLASH_VERSION "1.0.0"
+#define CRISFLASH_VERSION "1.1.0"
 #endif
 
 #include <stdio.h>
