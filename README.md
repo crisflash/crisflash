@@ -83,12 +83,12 @@ Information about genome-wide matching information of the candidates is availabl
 
 ## Versioning
 
-Crisflash is currently in release 1.1.0. We aim to follow versioning principles described in https://semver.org/.
+Crisflash is currently in release 1.2.0. We aim to follow versioning principles described in https://semver.org/.
 
 ## Authors
 
 * **Adrien Jacquin** - *Author for most of the code.*
-* **Margus Lukk** - *Idea, initial prototype and current maintainer of the code.*
+* **Margus Lukk** - *Author and current maintainer.*
 
 ## License
 
