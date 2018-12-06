@@ -31,11 +31,6 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "nary_tree.h"
 
-/* 
-   Written by Adrien Jacquin, April 2017
-   based on a prototype developed by Margus Lukk.
-*/
-
 /***************************************
           BASE MATCHING FUNCTIONS
 ***************************************/
@@ -496,7 +491,7 @@ void mcontainer_score(mcontainer *m, trie* T)
 }
 
 /**************************
-        VCF FONCTIONS
+        VCF FUNCTIONS
 **************************/
 
 VCF* VCF_install(FILE* f_vcf)
@@ -652,6 +647,8 @@ trieNodeTT* TrieCreateNodeTerminal(char nt)
 	a->chrs = malloc(sizeof(int)*a->allocated_array_len);
 	a->starts = malloc(sizeof(int)*a->allocated_array_len);
 	a->strands = malloc(sizeof(char)*a->allocated_array_len);
+	a->mtypes = malloc(sizeof(char)*a->allocated_array_len);
+	a->htypes = malloc(sizeof(char)*a->allocated_array_len);
 	a->brother = NULL;
 	a->hits = 0;
 	a->nt = nt;
@@ -816,6 +813,8 @@ void TrieRemoveNodeTerminal(trieNodeTT* child)
 	if (child->chrs != NULL) { free(child->chrs); }
 	if (child->strands != NULL) { free(child->strands); }
 	if (child->starts != NULL) { free(child->starts); }
+	if (child->mtypes != NULL) { free(child->mtypes); }
+	if (child->htypes != NULL) { free(child->htypes); }
 	free(child);
 	child = NULL;
 }
@@ -973,7 +972,7 @@ trieNodeTT* characterFoundTerminal(trieNodeTT* levelT, char nt)
 	return NULL;
 }
 
-int TrieAdd(trie* T, char* array, int alen, int chr, char strand, int start, float score, int* identical_seq)
+int TrieAdd(trie* T, char* array, int alen, int chr, char strand, char mtype, char htype, int start, float score, int* identical_seq)
 {
   /* This function is 30% faster compared to TrieAdd. With hg38.fa -l being 30% compared to TrieAdd (i.e. 20m vs 30m). */
   
@@ -1067,10 +1066,24 @@ int TrieAdd(trie* T, char* array, int alen, int chr, char strand, int start, flo
 	      fprintf(stderr,"Failed to allocate memory for %d-th genomic location of gRNA (strands). Exiting!\n", levelT->hits);
 	      exit(1);
 	    }
+	  levelT->mtypes = realloc(levelT->mtypes, sizeof(char) * (levelT->allocated_array_len));
+	  if (levelT->mtypes == NULL)
+	    {
+	      fprintf(stderr,"Failed to allocate memory for %d-th genomic location of gRNA (variant information types). Exiting!\n", levelT->hits);
+	      exit(1);
+	    }
+	  levelT->htypes = realloc(levelT->htypes, sizeof(char) * (levelT->allocated_array_len));
+	  if (levelT->htypes == NULL)
+	    {
+	      fprintf(stderr,"Failed to allocate memory for %d-th genomic location of gRNA haplotype information. Exiting!\n", levelT->hits);
+	      exit(1);
+	    }
 	}
 	levelT->chrs[levelT->hits] = chr;
 	levelT->starts[levelT->hits] = start;
 	levelT->strands[levelT->hits] = strand;
+	levelT->mtypes[levelT->hits] = mtype;
+	levelT->htypes[levelT->hits] = htype;
 	levelT->score = score;
 	// printf("Line %d for seq %s:\n",levelT->hits,array);
 	// printf("%d\n",chr);
@@ -1145,7 +1158,6 @@ mcontainer *TrieAMatch(trie *T, char array[], int alen, int nmis)
 	char *str;
 	int nelem = 0;
 	int pos = 1;
-	int i;
 	trieNodeT *node;
 	trieNodeTT *nodeT;
 	int mismatch = 0;

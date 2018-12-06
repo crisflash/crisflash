@@ -44,9 +44,6 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 #include "nary_tree.h"
 #include "vcf.h"
 
-/* Written by Adrien Jacquin, April 2017
-	based on a Margus Lukk script     */
-
 FILE* open_file(char *fname,char *mode) {
   FILE *fh = fopen(fname, mode);
   if (!fh) {
@@ -56,12 +53,46 @@ FILE* open_file(char *fname,char *mode) {
   return fh;
 }
 
+int baseInOther(char seqnt) {
+  /* Checks whether char, provided from 'variant edited' haplotype sequence is an editing mark or base pair. Values returned are used for calculating */
+  switch(seqnt) {
+  case '+':
+    return -1; // + in front of a base stands for one extra base in DNA sequence altered by variant data compared to standard reference, hence -1;
+    break;
+  case '-':
+    return +1; // - stands for a base which was deleted in this position in standard reference, hence +1;
+    break;
+  case '|':
+    return 0; // | stands for modified base, compared to standard reference, the number of bases compared to reference is the same.
+    break;
+  default:
+    return 5; // note that this is arbritary value and could, in theory be anything except -1,0,1. However, if changed, corresponding match values from code calling this function should be changed as well. 
+    break;
+  }
+}
+
 int baseMatch(char seqnt, char pamnt) {
   /* Checks whether base in DNA sequence (seqnt) matches with base in PAM pattern (pamnt).
      Assumes uppercase values for pamnt.
      Matching is provided based on  IUPAC representation for a position on a DNA sequence
      and were taken from https://en.wikipedia.org/wiki/Nucleic_acid_notation.
   */
+
+  // first check whether sequence base happens to be one of following: '+', '-', '|'.
+  switch(seqnt) {
+  case '+':
+    return 2;
+    break;
+  case '-':
+    return 2;
+    break;
+  case '|':
+    return 2;
+    break;
+  default:
+    break;
+  }
+
   switch(pamnt)
     {
     case 'N':
@@ -388,6 +419,15 @@ char baseComplementUppercaseOnly(char seqnt) {
     case 'C':
       return 'G';
       break;
+    case '+':
+      return '+';
+      break;
+    case '-':
+      return '-';
+      break;
+    case '|':
+      return '|';
+      break;
     default:
       fprintf(stderr,"[crisflash] ERROR: '%c' not valid DNA base symbol!\n", seqnt);
       exit(0);
@@ -467,8 +507,42 @@ void updateSizeGRNAs(grna_list *g) {
   }
 }
 
+void freeGRNAs(grna_list *g) {
+  free(g->starts);
+  free(g->strands);
+  free(g);
+}
+
+grna_list* installGRNAList(int guidelen) {
+  grna_list *glist = malloc(sizeof(grna_list));
+  glist->starts = malloc(sizeof(long long)*glist->length);
+  glist->strands = malloc(sizeof(char)*glist->length);
+  glist->mtypes = malloc(sizeof(char)*glist->length);
+  glist->sequences = malloc(sizeof(char)*glist->length*guidelen);
+  return glist;
+}
+
+void updateSizeGRNAList(grna_list *g, int guidelen) {
+  g->pos++;
+  if(g->pos == g->length) {
+    g->length = g->length+300000;
+    g->starts = realloc(g->starts,g->length*sizeof(long long));
+    g->strands = realloc(g->strands,g->length*sizeof(char));    
+    g->mtypes = realloc(g->mtypes,g->length*sizeof(char));
+    g->sequences = realloc(g->sequences,g->length*sizeof(char)*guidelen);
+  }
+}
+
+void freeGRNAList(grna_list *g, int guidelen) {
+  free(g->sequences);
+  free(g->mtypes);
+  free(g->strands);
+  free(g->starts);
+  free(g);
+}
+
 void printGRNAs(grna_list *g, int guidelen, FILE *f) {
-  /** Note that this function prints gRNAs only for one chromosome at the time. **/
+  /** Prints gRNAs in grna_list **/
   
   long long i=0;
   int j;
@@ -486,8 +560,76 @@ void printGRNAs(grna_list *g, int guidelen, FILE *f) {
       }
     }
     grna[guidelen] = '\0';
-    fprintf(f,"%s\t%lld\t%lld\t%s\t0\t%c\n", g->chr, g->starts[i], (g->starts[i]+guidelen), grna,g->strands[i]);
+    // we add 1 to start position as for bed files we want chromosomes to start from position one. Internally all start
+    // coordinates are computed starting from 0 for a reason that cas-offinder also does so
+    fprintf(f,"%s\t%lld\t%lld\t%s\t0\t%c\n", g->chr, (g->starts[i]+1), (g->starts[i]+guidelen), grna,g->strands[i]);
   }
+}
+
+void printGRNAsHaplotypes(grna_list *g1, grna_list *g2, int guidelen, FILE *f) {
+  /* Prints grnas for both haplotypes by sorting (to best of its abilities) chromosomal coordinates on fly */
+  long long g1pos=0;
+  long long g2pos=0;
+  long long res;
+  char *grna = malloc(sizeof(char)*(guidelen+1));
+  char *grna2 = malloc(sizeof(char)*(guidelen+1));
+
+  while( (g1pos < g1->pos) && (g2pos < g2->pos) ) {
+    res = g1->starts[g1pos] - g2->starts[g2pos];
+    if(res>0) {
+      //process g2
+      strncpy(grna,g2->sequences+(g2pos*guidelen),guidelen);
+      grna[guidelen] = '\0';
+      fprintf(f,"%s\t%lld\t%lld\t%s:2%c\t0\t%c\n", g2->chr, (g2->starts[g2pos]+1), (g2->starts[g2pos]+guidelen), grna, g2->mtypes[g2pos],g2->strands[g2pos]);
+      g2pos++;
+    }
+    else if(res<0) {
+      // process g1
+      strncpy(grna,g1->sequences+(g1pos*guidelen),guidelen);
+      grna[guidelen] = '\0';
+      fprintf(f,"%s\t%lld\t%lld\t%s:1%c\t0\t%c\n", g1->chr, (g1->starts[g1pos]+1), (g1->starts[g1pos]+guidelen), grna,g1->mtypes[g1pos],g1->strands[g1pos]);
+      g1pos++;
+    }
+    else {
+      // g1 and g2 positions must be equal
+      strncpy(grna, g1->sequences+(g1pos*guidelen),guidelen);
+      grna[guidelen] = '\0';
+
+      strncpy(grna2, g2->sequences+(g2pos*guidelen),guidelen);
+      grna2[guidelen] = '\0';
+      // if sequences are equal as well, assume strand and mutation profiles are too. Report gRNA for both haplotypes.
+      if(strcmp(grna, grna2) == 0) {
+	fprintf(f,"%s\t%lld\t%lld\t%s:3%c\t0\t%c\n", g1->chr, (g1->starts[g1pos]+1), (g1->starts[g1pos]+guidelen), grna,g1->mtypes[g1pos],g1->strands[g1pos]);
+      }
+      else {
+	fprintf(f,"%s\t%lld\t%lld\t%s:1%c\t0\t%c\n", g1->chr, (g1->starts[g1pos]+1), (g1->starts[g1pos]+guidelen), grna, g1->mtypes[g1pos], g1->strands[g1pos]);
+	fprintf(f,"%s\t%lld\t%lld\t%s:2%c\t0\t%c\n", g2->chr, (g2->starts[g2pos]+1), (g2->starts[g2pos]+guidelen), grna2, g2->mtypes[g2pos],g2->strands[g2pos]);
+      }
+      g1pos++;
+      g2pos++;
+    }
+
+    if(g1pos == g1->pos) {
+      // deal with rest of g2
+      for(;g2pos < g2->pos;g2pos++) {
+	strncpy(grna,g2->sequences+(g2pos*guidelen),guidelen);
+	grna[guidelen] = '\0';
+	fprintf(f,"%s\t%lld\t%lld\t%s:2%c\t0\t%c\n", g2->chr, (g2->starts[g2pos]+1), (g2->starts[g2pos]+guidelen), grna, g2->mtypes[g2pos],g2->strands[g2pos]);
+      }
+      break;
+    }
+    if(g2pos == g2->pos) {
+      // deal with rest of g1
+      for(;g1pos<g1->pos;g1pos++) {
+	strncpy(grna,g1->sequences+(g1pos*guidelen),guidelen);
+	grna[guidelen] = '\0';
+	fprintf(f,"%s\t%lld\t%lld\t%s:1%c\t0\t%c\n", g1->chr, (g1->starts[g1pos]+1), (g1->starts[g1pos]+guidelen), grna,g1->mtypes[g1pos],g1->strands[g1pos]);
+      }
+      break;
+    }
+  }
+  free(grna);
+  free(grna2);
 }
 
 void GRNAsToTrie(trie *T, grna_list *g, int guidelen, int chr_number) {
@@ -501,8 +643,9 @@ void GRNAsToTrie(trie *T, grna_list *g, int guidelen, int chr_number) {
   int identical_seq = 0; // counts the sequences not added in the tree because they were already there
   
   for(i=0;i<g->pos;i++) {
-    if(g->strands[i] == '+') {      
-      if(!TrieAdd(T, g->pstrand+(g->starts[i]), guidelen, chr_number, g->strands[i], g->starts[i], 0, &identical_seq)) {
+    if(g->strands[i] == '+') {
+      // '0' and '3' stand for 'no variant modification in guide' and for 'guide sequences in both haplotypes being the same', respectively.
+      if(!TrieAdd(T, g->pstrand+(g->starts[i]), guidelen, chr_number, g->strands[i], '0', '3',g->starts[i], 0, &identical_seq)) {
 	fprintf(stderr,"[crisflash] ERROR: Failed to add gRNA sequence detected in chr=%s, pos=%lld, strand=%c. Exiting!",T->chr_names[chr_number],g->starts[i], g->strands[i]);
 	exit(1);
       }
@@ -512,7 +655,7 @@ void GRNAsToTrie(trie *T, grna_list *g, int guidelen, int chr_number) {
       for(j=0;j<guidelen;j++) {
 	grna[j]=g->nstrand[k-j];
       }
-      if(!TrieAdd(T, grna, guidelen, chr_number, g->strands[i], g->starts[i], 0, &identical_seq)) {
+      if(!TrieAdd(T, grna, guidelen, chr_number, g->strands[i], '0', '3',g->starts[i], 0, &identical_seq)) {
 	fprintf(stderr,"[crisflash] ERROR: Failed to add gRNA sequence in chr=%s, pos=%lld, strand=%c). Exiting!",T->chr_names[chr_number],g->starts[i], g->strands[i]);
 	exit(1);
       }
@@ -521,11 +664,106 @@ void GRNAsToTrie(trie *T, grna_list *g, int guidelen, int chr_number) {
   free(grna);
 }
 
-void freeGRNAs(grna_list *g) {
-  free(g->starts);
-  free(g->strands);
-  free(g);
+void GRNAsToTrieHaplotypes(trie *T, grna_list *g1, grna_list *g2, int guidelen, int chr_number) {
+  /** Adds gRNAs in g1 (gRNAs from haplotype 1) and g2 (gRNAs from haplotype 2) from specified sequence/chromosome to Trie. **/
+  // the function follows same structure/layout as printGRNAsHaplotypes
+
+  long long g1pos=0;
+  long long g2pos=0;
+  long long res;
+  char *grna = malloc(sizeof(char)*(guidelen+1));
+  char *grna2 = malloc(sizeof(char)*(guidelen+1));
+  int identical_seq = 0; // counts the sequences not added in the tree because they were already there
+
+  while( (g1pos < g1->pos) && (g2pos < g2->pos) ) {
+    res = g1->starts[g1pos] - g2->starts[g2pos];
+    if(res>0) {
+      //process g2
+      // strncpy(grna,g2->sequences+(g2pos*guidelen),guidelen);
+      // grna[guidelen] = '\0';
+      // fprintf(stdout,"%s\t%lld\t%lld\t%s:2%c\t0\t%c\n", g2->chr, (g2->starts[g2pos]+1), (g2->starts[g2pos]+guidelen), grna, g2->mtypes[g2pos],g2->strands[g2pos]);
+      if(!TrieAdd(T, g2->sequences+(g2pos*guidelen), guidelen, chr_number, g2->strands[g2pos], g2->mtypes[g2pos], '2', g2->starts[g2pos], 0, &identical_seq)) {
+	fprintf(stderr,"[crisflash] ERROR: Failed to add gRNA sequence detected in chr=%s, pos=%lld, strand=%c. Exiting!",T->chr_names[chr_number],g2->starts[g2pos], g2->strands[g2pos]);
+	exit(1);
+      }
+      g2pos++;
+    }
+    else if(res<0) {
+      // process g1
+      // strncpy(grna,g1->sequences+(g1pos*guidelen),guidelen);
+      // grna[guidelen] = '\0';
+      // fprintf(stdout,"%s\t%lld\t%lld\t%s:1%c\t0\t%c\n", g1->chr, (g1->starts[g1pos]+1), (g1->starts[g1pos]+guidelen), grna,g1->mtypes[g1pos],g1->strands[g1pos]);
+      if(!TrieAdd(T, g1->sequences+(g1pos*guidelen), guidelen, chr_number, g1->strands[g1pos], g1->mtypes[g1pos], '1', g1->starts[g1pos], 0, &identical_seq)) {
+	fprintf(stderr,"[crisflash] ERROR: Failed to add gRNA sequence detected in chr=%s, pos=%lld, strand=%c. Exiting!",T->chr_names[chr_number],g1->starts[g1pos], g1->strands[g1pos]);
+	exit(1);
+      }
+      g1pos++;
+    }
+    else {
+      // check g1 and g2 positions must be equal
+      strncpy(grna, g1->sequences+(g1pos*guidelen),guidelen);
+      grna[guidelen] = '\0';
+      strncpy(grna2, g2->sequences+(g2pos*guidelen),guidelen);
+      grna2[guidelen] = '\0';
+      // if sequences are equal, enter only one guide, assume strand and mutation profiles are too. Report gRNA for both haplotypes.
+      if(strcmp(grna, grna2) == 0) {
+	// fprintf(stdout,"%s\t%lld\t%lld\t%s:3%c\t0\t%c\n", g1->chr, (g1->starts[g1pos]+1), (g1->starts[g1pos]+guidelen), grna,g1->mtypes[g1pos],g1->strands[g1pos]);
+	if(!TrieAdd(T, g1->sequences+(g1pos*guidelen), guidelen, chr_number, g1->strands[g1pos], g1->mtypes[g1pos], '3',g1->starts[g1pos], 0, &identical_seq)) {
+	  fprintf(stderr,"[crisflash] ERROR: Failed to add gRNA sequence detected in chr=%s, pos=%lld, strand=%c. Exiting!",T->chr_names[chr_number],g1->starts[g1pos], g1->strands[g1pos]);
+	  exit(1);	
+	}
+      }
+      // g2 and g2 start positions were not equal!
+      else {
+	// fprintf(stdout,"%s\t%lld\t%lld\t%s:1%c\t0\t%c\n", g1->chr, (g1->starts[g1pos]+1), (g1->starts[g1pos]+guidelen), grna, g1->mtypes[g1pos], g1->strands[g1pos]);
+	if(!TrieAdd(T, g1->sequences+(g1pos*guidelen), guidelen, chr_number, g1->strands[g1pos], g1->mtypes[g1pos], '1',g1->starts[g1pos], 0, &identical_seq)) {
+	  fprintf(stderr,"[crisflash] ERROR: Failed to add gRNA sequence detected in chr=%s, pos=%lld, strand=%c. Exiting!",T->chr_names[chr_number],g1->starts[g1pos], g1->strands[g1pos]);
+	  exit(1);
+	}
+	// fprintf(stdout,"%s\t%lld\t%lld\t%s:2%c\t0\t%c\n", g2->chr, (g2->starts[g2pos]+1), (g2->starts[g2pos]+guidelen), grna2, g2->mtypes[g2pos],g2->strands[g2pos]);
+	if(!TrieAdd(T, g2->sequences+(g2pos*guidelen), guidelen, chr_number, g2->strands[g2pos], g2->mtypes[g2pos], '2', g2->starts[g2pos], 0, &identical_seq)) {
+	  fprintf(stderr,"[crisflash] ERROR: Failed to add gRNA sequence detected in chr=%s, pos=%lld, strand=%c. Exiting!",T->chr_names[chr_number],g2->starts[g2pos], g2->strands[g2pos]);
+	  exit(1);
+	}
+      }
+      
+      g1pos++;
+      g2pos++;
+    }
+    
+    // check for end in g1 and g2 gRNA lists
+    if(g1pos == g1->pos) {
+      // deal with rest of g2
+      for(;g2pos < g2->pos;g2pos++) {
+	// strncpy(grna,g2->sequences+(g2pos*guidelen),guidelen);
+	// grna[guidelen] = '\0';
+	// fprintf(stdout,"%s\t%lld\t%lld\t%s:2%c\t0\t%c\n", g2->chr, (g2->starts[g2pos]+1), (g2->starts[g2pos]+guidelen), grna, g2->mtypes[g2pos],g2->strands[g2pos]);
+	if(!TrieAdd(T, g2->sequences+(g2pos*guidelen), guidelen, chr_number, g2->strands[g2pos], g2->mtypes[g2pos], '2', g2->starts[g2pos], 0, &identical_seq)) {
+          fprintf(stderr,"[crisflash] ERROR: Failed to add gRNA sequence detected in chr=%s, pos=%lld, strand=%c. Exiting!",T->chr_names[chr_number],g2->starts[g2pos], g2->strands[g2pos]);
+          exit(1);
+        }
+      }
+      break;
+    }
+    if(g2pos == g2->pos) {
+      // deal with rest of g1
+      for(;g1pos<g1->pos;g1pos++) {
+	// strncpy(grna,g1->sequences+(g1pos*guidelen),guidelen);
+	// grna[guidelen] = '\0';
+	// fprintf(stdout,"%s\t%lld\t%lld\t%s:1%c\t0\t%c\n", g1->chr, (g1->starts[g1pos]+1), (g1->starts[g1pos]+guidelen), grna,g1->mtypes[g1pos],g1->strands[g1pos]);
+	if(!TrieAdd(T, g1->sequences+(g1pos*guidelen), guidelen, chr_number, g1->strands[g1pos], g1->mtypes[g1pos], '1', g1->starts[g1pos], 0, &identical_seq)) {
+          fprintf(stderr,"[crisflash] ERROR: Failed to add gRNA sequence detected in chr=%s, pos=%lld, strand=%c. Exiting!",T->chr_names[chr_number],g1->starts[g1pos], g1->strands[g1pos]);
+          exit(1);
+        }
+      }
+      break;
+    }
+  }
+  free(grna);
+  free(grna2);
+
 }
+
 
 grna_list *fastaSequenceToGRNAs(char *header, char *s, char *sr, long long spos, char *pam) {
 
@@ -566,7 +804,7 @@ grna_list *fastaSequenceToGRNAs(char *header, char *s, char *sr, long long spos,
 	    }
 	    break;
 	  }
-	}	 		  
+	}  
     }
   
   // Search for PAM sites on both strands
@@ -647,107 +885,183 @@ grna_list *fastaSequenceToGRNAs(char *header, char *s, char *sr, long long spos,
   return glist;
 }
 
-/*
-void faSequenceToTrie(trie* T, char *header, char *s, char *sr, long long spos, char *pam, char *outputfname, int upper_case_only) {
-  // This function has been deprecated we are using faSequenceToGRNA instead
+long long isPamStartOnPositiveStrand(grna_list *glist, long long nt, char *pam, int pamlen) {
+  /* Matches pam sequence of lenght pamlen in sequence s of length spos, starting from position nt. Returns the end position of the pam sequence in s or -1. */
+  int iS = 0;
+  int iP = 0;
+  int res;
+ 
+  while( (res=baseMatch(glist->pstrand[nt+iS], pam[iP]) )) {
+    // fprintf(stdout,"Seq[%lld]=%c\tPam[%d]=%c\tiS=%d\tiP=%d\n",nt+iS,s[nt+iS], iP, pam[iP], iS, iP);   
+    if(res == 0) {
+      return -1;
+    }
+    else {
+      if (res == 1) {
+	iP++;
+	if (iP == pamlen) {
+	  return nt+iS;
+	}
+      }
+      iS++;
+      if( (nt+iS) == glist->slen) {
+	return -1;
+      }
+    }
+  }
+  return -1;
+}
+
+long long isPamStartOnNegativeStrand(grna_list *glist, long long nt, char *pam, int pamlen) {
+  /* Matches pam sequence of lenght pamlen in reverse in sequence sr of length spos, starting from position nt. Returns the end position of the pam sequence in s or -1. */
+  int iS = 0;
+  int iP = 0;
+  int res;
+
+  while( (res=baseMatch(glist->nstrand[nt+iS], pam[pamlen-1-iP]) )) {
+    if(res == 0) {
+      return -1;
+    }
+    else {
+      if (res == 1) {
+	iP++;
+	if (iP == pamlen) {
+	  return nt;
+	}
+      }
+      iS++;
+      if( (nt+iS) == glist->slen) {
+	return -1;
+      }
+    }
+  }
+  return -1;
+}
+
+int addGrnaOnPositiveStrand(grna_list *glist, long long pamendpos, int guidelen, int pamlen, long long real_pam_start) {
+  /** Adds gRNA sequence to the list gRNA sequences in glist->sequences unless the protospacer hangs over an edge of the target (chromosome) sequence. Returns 1 for success and 0 for failure. **/
+  /** real_pam_start is a computed hypothetical location of where the PAM would have started if the reference genome would not have been edited with variant and indel info. **/
+  long long i = pamendpos;
+  int gpos = 0; 
+  char mtype = '0';
+  int mod;
+
+  while(i > -1) {
+    if(glist->pstrand[i] == 'N') {
+      // fprintf(stdout,"Sequence not added! %d bases available before running into N\n", gpos);  
+      return 0;
+    }
+    if((mod = baseInOther(glist->pstrand[i])) != 5) {
+      i--;      
+      if(gpos < pamlen) {
+	mtype = 'b';
+      }
+      else {
+	if (mtype == 'b') { mtype = 'f'; }
+	else { mtype = 'c'; }
+      }
+      continue;
+    }
+    glist->sequences[(glist->pos*guidelen)+(guidelen-gpos-1)] = glist->pstrand[i];
+    i--;
+    gpos++;
+    if(gpos == guidelen) {
+      // gRNA start here is reported as location where the gRNA would have started in standard reference genome. All effort has been made to make sure the real_pam_start value would be correct ...
+      glist->starts[glist->pos] = real_pam_start - PROTOSPACER_LENGTH;
+      glist->strands[glist->pos] = '+';
+      glist->mtypes[glist->pos] = mtype;
+      updateSizeGRNAList(glist,guidelen);
+      return 1;
+    }
+  }
+  // fprintf(stderr,"Sequence not added! %d bases available before running over the edge of the target/chromosome sequence\n", gpos);  
+  return 0;
+}
+
+int addGrnaOnNegativeStrand(grna_list *glist, long long pamendpos, int guidelen, int pamlen, long long real_pam_start) {
+  /** Adds gRNA sequence to the list gRNA sequences in glist->sequences unless the protospacer hangs over an edge of the target (chromosome) sequence. Returns 1 for success and 0 for failure. **/
+  /** real_pam_start is a computed hypothetical location of where the PAM would have started if the reference genome would not have been edited with variant and indel info. **/
+  long long i = pamendpos;
+  int gpos = 0; 
+  char mtype = '0';
+  int mod;
+
+  while(i < glist->slen) {
+    if(glist->nstrand[i] == 'N') {
+      // fprintf(stdout,"Sequence not added! %d bases available before running into N\n", gpos);  
+      return 0;
+    }
+    if((mod = baseInOther(glist->nstrand[i])) != 5) {
+      i++;
+      if(gpos < pamlen) {
+	mtype = 'b';
+      }
+      else {
+	if (mtype == 'b') { mtype = 'f'; }
+	else { mtype = 'c'; }
+      }
+      continue;
+    }
+    glist->sequences[(glist->pos*guidelen)+(guidelen-gpos-1)] = glist->nstrand[i];
+    i++;
+    gpos++;
+    if(gpos == guidelen) {
+      // gRNA start here is reported as location where the gRNA would have started in standard reference genome. All effort has been made to make sure the real_pam_start value would be correct ..
+      glist->starts[glist->pos] = real_pam_start;
+      glist->strands[glist->pos] = '-';
+      glist->mtypes[glist->pos] = mtype;
+      updateSizeGRNAList(glist,guidelen);
+      return 1;
+    }
+  }
+  // fprintf(stderr,"Sequence not added! %d bases available before running over the edge of the target/chromosome sequence\n", gpos);  
+  return 0;
+}
+
+grna_list *fastaVariantSequenceToGRNAsequences(char *header, char *s, char *sr, long long spos, char *pam) {
+  /* Identifies and returns a list of gRNAs from sequence edited for variants and indels. */
 
   // variables for calculating PAMs
   int pamlen = strlen(pam); // length of the PAM motif
-  int guidelen = pamlen+PROTOSPACER_LENGTH; // length of the gRNA  
-  char *gRNA = malloc(sizeof(char)*(20+pamlen+1));
-  int identical_seq = 0;
-  int add = 0; // to catch return values from TrieAdd. 0 - gRNA not added to trie. 1 otherwise.
-  int y, nt;
-  int chr_number;
+  int guidelen = pamlen+PROTOSPACER_LENGTH; // length of the gRNA
+  // grna_list *glist = installGRNAlist(guidelen);
+  grna_list *glist = malloc(sizeof(grna_list));
+  glist->length = 300000;
+  glist->starts = malloc(sizeof(long long)*glist->length);
+  glist->strands = malloc(sizeof(char)*glist->length);
+  glist->mtypes = malloc(sizeof(char)*glist->length);
+  glist->sequences = malloc(sizeof(char)*glist->length*guidelen);
+  glist->pstrand = s;
+  glist->nstrand = sr;
+  glist->slen = spos;
+  glist->chr = header;
+  glist->pos = 0;
+ 
+  long long nt;
+  long long pamendpos;
+  long long realpos = 0; // note that chromosomes should normally start on position 1. Here we start from 0 as does cas-offinder.
+  int mod;
 
-  // add header (chr name) to to list of chromosome names in T.
-  chr_number = addChr(T, header, strlen(header));
-    
-  // For first 20bp, search for PAMs on negative strand only
-  for(nt=0; nt<PROTOSPACER_LENGTH; nt++)
-    {
-      // safetynet of avoiding to read over the 3' edge of the sequence
-      if ((nt+guidelen) > spos) { break; }
-      y = 0;
-      while(baseMatch(sr[nt+y], pam[pamlen-1-y]))
-	{
-	  y++;
-	  if (y==pamlen) {
-	    for(int j=0;j<guidelen;j++) {
-	      if (sr[nt+guidelen-j-1] == 'N') { break; }
-	      gRNA[j]=sr[nt+guidelen-j-1];
-	    }
-	    //	    add = TrieAdd(T, gRNA, guidelen, chr_number, '-', spos, 0, &identical_seq);
-	    // report found gRNA on positive strand
-	    fprintf(stdout,"%s\t%d\t%ld\t-\n",gRNA,header,nt);
-	    break;
-	  }
-	}	 		  
+  for(nt=0; nt < spos; nt++) {
+    // fprintf(stdout,"s[%lld]=%c\n",nt,s[nt]);
+    if( (mod = baseInOther(s[nt])) != 5) {
+      // fprintf(stdout,"realpos modified from %lld to %lld\n",realpos, realpos+mod);
+      realpos = realpos + mod;
+      continue;
+    }    
+    if ((pamendpos = isPamStartOnPositiveStrand(glist, nt, pam, pamlen)) != -1) {
+      addGrnaOnPositiveStrand(glist,pamendpos, guidelen, pamlen, realpos);
+      // fprintf(stdout,"+PAM ends at %lld, glist->pos=%lld\n",pamendpos, glist->pos);
     }
-  
-  // Search for PAM sites on both strands
-  for(nt=20; nt<(spos-guidelen); nt++)
-    {
-      y = 0;
-      // Search PAM sequences on positive strand.		
-      while(baseMatch(s[nt+y], pam[y]))
-	{
-	  y++;
-	  if (y==pamlen) {
-	    // add = TrieAdd(T, s+(nt-PROTOSPACER_LENGTH), guidelen, chr_number, '-', spos, 0, &identical_seq);
-	    for(int j=0;j<(guidelen);j++) {
-	      if(s[nt-PROTOSPACER_LENGTH+j] == 'N') { break; }
-	      gRNA[j]=s[nt-PROTOSPACER_LENGTH+j];
-	    }
-	    // report found gRNA on positive strand
-	    fprintf(stdout,"%s\t%s\t%ld\t+\n",gRNA,header,(nt-PROTOSPACER_LENGTH));
-	    break;
-	  }
-	} // end of while
-      
-      // Search PAM on negative strand
-      y = 0;
-      while(baseMatch(sr[nt+y], pam[pamlen-1-y]))
-	{
-	  y++;
-	  if (y==pamlen) {		    
-	    for(int j=0;j<(guidelen);j++) {
-	      if (sr[nt+guidelen-j-1] == 'N') { break; }
-	      gRNA[j]=sr[nt+guidelen-j-1];
-	    }
-	    // add = TrieAdd(T, gRNA, guidelen, chr_number, '-', spos, 0, &identical_seq);
-	    // report found gRNA on negative strand
-	    fprintf(stdout,"%s\t%s\t%ld\t-\n",gRNA,header,nt);
-	    break;
-	  }
-	} // end of while	     		
+    if ((pamendpos = isPamStartOnNegativeStrand(glist, nt, pam, pamlen)) != -1) {
+      addGrnaOnNegativeStrand(glist,pamendpos, guidelen, pamlen, realpos);
+      // fprintf(stdout,"-PAM ends at %lld, glist->pos=%lld\n",pamendpos, glist->pos);
     }
-  
-  // Search for PAMs only on positive strand for the remaining bit of the sequence
-  for(nt=(spos-guidelen); nt<(spos-pamlen); nt++)
-    {
-      // safetynet of exceptionally shot DNA sequence
-      if ((nt-PROTOSPACER_LENGTH) < 0) { continue; }			       
-      y = 0;
-      while(baseMatch(sr[nt+y], pam[pamlen-1-y]))
-	{
-	  y++;
-	  if (y==pamlen) {
-	    // add = TrieAdd(T, s+(nt-PROTOSPACER_LENGTH), guidelen, chr_number, '-', spos, 0, &identical_seq);
-	    for(int j=0;j<(guidelen);j++) {
-	      if(s[nt-PROTOSPACER_LENGTH+j] == 'N') { break; }
-	      gRNA[j]=s[nt-PROTOSPACER_LENGTH+j];
-	    }
-	    fprintf(stdout,"%s\t%s\t%ld\t+\n",gRNA,header,nt); // <- this is old sanity check
-	    // fprintf(f, "%s\t%d\t%d\t%s\t%f\t%c\n", T->chr_names[chr_number], chr_pos-22, chr_pos+1, seq, 0., '+'); }
-	    break;
-	  }
-	}	  
-    }
-  
-  free(gRNA);
+    realpos++;
+  }
+  fprintf(stdout,"[crisflash] Estimated reference length for '%s' excluding indels: %lld\n",header,realpos);
+  return glist;
 }
-*/
 
 faread_struct* installFastaReader(char *genomefname, int no_low_complexity) {
   /* Installs faread_struct for provided file name. */
@@ -769,7 +1083,7 @@ faread_struct* installFastaReader(char *genomefname, int no_low_complexity) {
   fas->alive = 1;
   fas->sequence = 0;
   
-  // open file and read first chunk of data
+  // open file and read first chunk (first fasta entry, e.g. chromosome)
   fas->fd = open(genomefname, O_RDONLY);
   fas->bytes_read = read(fas->fd, fas->buffer, BUFFER_SIZE);
 
@@ -804,6 +1118,12 @@ void fastaReaderImproveSequence(faread_struct *fas) {
       case 'C':
 	fas->sr[nt] = 'G';
 	break;
+      case '+':
+	fas->sr[nt] = '+';
+      case '-':
+	fas->sr[nt] = '-';
+      case '|':
+	fas->sr[nt] = '|';
       default:
 	fas->s[nt] = 'N';
 	fas->sr[nt] = 'N';
@@ -938,9 +1258,10 @@ int fastaReader(faread_struct *fas) {
   return 1;
 }
 
-void readFaToTrie(trie *T, char *genomefname, char *pam, char* outputfname, int append, int uppercaseOnly, int printGRNAsOnly) {
+void readFaToTrie(trie *T, char *genomefname, char *pam, char* outputfname, int uppercaseOnly, int printGRNAsOnly) {
+  /* Identifies all gRNAs in reference sequence and loads them to Trie. */
   faread_struct *fas = installFastaReader(genomefname, uppercaseOnly);
-  grna_list *g;
+  grna_list *g = NULL;
   int chr_number;
   int guidelen = PROTOSPACER_LENGTH+strlen(pam);
   FILE* outfh;
@@ -964,6 +1285,78 @@ void readFaToTrie(trie *T, char *genomefname, char *pam, char* outputfname, int 
     freeGRNAs(g);
   }
   freeFastaReader(fas);
+}
+
+void readFaToTrieVCF(trie *T, char *genomefname1, char *genomefname2, char *pam, char* outputfname, int uppercaseOnly, int printGRNAsOnly) {
+  /** Reads haplotype level genome references, identifies gRNAs and loads them to trie. If gRNA is identical in both haplotypes, only one of them is loaded to Trie and labeled accordinly. **/
+  faread_struct *fas1 = installFastaReader(genomefname1, uppercaseOnly);
+  faread_struct *fas2 = installFastaReader(genomefname2, uppercaseOnly);
+  grna_list *g1 = NULL;
+  grna_list *g2 = NULL;
+  int chr_number;
+  int guidelen = PROTOSPACER_LENGTH+strlen(pam);
+  FILE* outfh;
+  int read_success1, read_success2;
+  
+  if(printGRNAsOnly) {
+    outfh = open_file(outputfname, "w");
+  }
+
+  fprintf(stdout,"[crisflash] Starting gRNA discovery.\n");
+  // read first fasta sequence (chromosome) in file
+  fprintf(stdout,"[crisflash] Reading sequence from %s.\n",genomefname1);
+  fflush(stdout);
+  read_success1 = fastaReader(fas1);
+  fprintf(stdout,"[crisflash] Reading sequence from %s.\n",genomefname1);
+  fflush(stdout);
+  read_success2 = fastaReader(fas2);
+  
+  while(read_success1 && read_success2) {
+
+    if (strcmp(fas1->header, fas2->header) != 0) {
+      fprintf(stdout,"[crisflash] ERROR! Chr order in %s and %s not the same: %s != %s. Exiting!\n", genomefname1, genomefname2, fas1->header, fas2->header);
+      exit(1);
+    }
+    
+    fprintf(stdout,"[crisflash] Processing 1st haploid sequence for '%s;.\n", fas1->header);
+    fflush(stdout);
+    fastaReaderImproveSequence(fas1);
+    fprintf(stdout,"[crisflash] Processing 2nd haploid sequence for '%s'.\n", fas1->header);
+    fflush(stdout);
+    fastaReaderImproveSequence(fas2);
+
+    fprintf(stdout,"[crisflash] Running gRNA discovery for 1st haploid sequence of '%s'\n",fas1->header);
+    fflush(stdout);
+    g1 = fastaVariantSequenceToGRNAsequences(fas1->header, fas1->s, fas1->sr, fas1->slen, pam);
+    fprintf(stdout,"[crisflash] Running gRNA discovery for 2nd haploid sequence of '%s'\n",fas1->header);
+    fflush(stdout);
+    g2 = fastaVariantSequenceToGRNAsequences(fas2->header, fas2->s, fas2->sr, fas2->slen, pam);
+
+    if(printGRNAsOnly) {
+      fprintf(stdout,"[crisflash] Saving gRNAs in '%s'.\n", fas1->header);
+      fflush(stdout);
+      printGRNAsHaplotypes(g1, g2, guidelen, outfh);
+    }
+    else {
+      fprintf(stdout,"[crisflash] Indexing gRNAs in %s.\n", fas1->header);    
+      fflush(stdout);
+      chr_number = addChr(T, g1->chr, strlen(g1->chr)); // we get the chr number in order of appearence in fasta file
+      chr_number = addChr(T, g2->chr, strlen(g1->chr)); // we get the chr number in order of appearence in fasta file
+      GRNAsToTrieHaplotypes(T, g1, g2, guidelen,chr_number);
+    }
+    freeGRNAList(g1,guidelen);
+    freeGRNAList(g2,guidelen);
+
+    // read next fasta sequence (chromosome)
+    fprintf(stdout,"[crisflash] Reading sequence from %s.\n",genomefname1);
+    fflush(stdout);
+    read_success1 = fastaReader(fas1);
+    fprintf(stdout,"[crisflash] Reading sequence from %s.\n",genomefname1);
+    fflush(stdout);
+    read_success2 = fastaReader(fas2);
+  }
+  freeFastaReader(fas1);
+  freeFastaReader(fas2);
 }
 
 double now()
@@ -996,15 +1389,14 @@ void writeInBed_lighter(FILE* f, mcontainer *m, char* chrom, long long start, lo
   fprintf(f, "%s\t%lld\t%lld\t%s/%d/%d\t%f\t%c\n", chrom, start, end, gRNA, nr_of_exact_matches, nr_of_off_targets, m->score, strand);
 }
 
-void writeInCasOffinder(FILE* fh, char *gRNA, mcontainer *m, trie* T)
+void writeInCasOffinder(FILE* fh, char *gRNA, mcontainer *m, trie* T, int addVariantHaplotypeInfo)
 {
-  /* Writes match information in Cas-OFFinder format */
+  /* Writes match information in Cas-OFFinder format. If addVariantInfo !=0 adds extra column containing variant info on haplotype level.  */
   
-  // in case mcontainer is empty
+  // if mcontainer is empty, i.e. no matches, return right away.
   if(m->pos == 0) {
     return;
   }
-  
   
   // Columns in the output: sequence+NNN   chr   pos   sequence_with_mismatched_bases_lowercase   strand   nr_of_mismatches
   int i = 0;
@@ -1019,7 +1411,7 @@ void writeInCasOffinder(FILE* fh, char *gRNA, mcontainer *m, trie* T)
     }
     i++;
   }
-  // gRNA4print[T->readlen] = '\0';
+  gRNA4print[T->readlen] = '\0';
 
   i=0;  
   char *seq = (char *) malloc(sizeof(char)*(strlen(m->sarray[i])+1));  
@@ -1038,10 +1430,18 @@ void writeInCasOffinder(FILE* fh, char *gRNA, mcontainer *m, trie* T)
 	{
 	  seq[m->parray[i][j]-1] = tolower(seq[m->parray[i][j]-1]);
 	}
-      for(j=0; j < m->nodes[i]->hits;j++)
-	{
-	  fprintf(fh,"%s\t%s\t%d\t%s\t%c\t%d\n", gRNA4print, T->chr_names[m->nodes[i]->chrs[j]], m->nodes[i]->starts[j], seq, m->nodes[i]->strands[j], m->marray[i]);
-	}
+      if (addVariantHaplotypeInfo) {
+	for(j=0; j < m->nodes[i]->hits;j++)
+	  {
+	    fprintf(fh,"%s\t%s\t%d\t%s\t%c\t%d\t%c%c\n", gRNA4print, T->chr_names[m->nodes[i]->chrs[j]], m->nodes[i]->starts[j], seq, m->nodes[i]->strands[j], m->marray[i], m->nodes[i]->htypes[i],m->nodes[i]->mtypes[i]);
+	  }
+      }
+      else {
+	for(j=0; j < m->nodes[i]->hits;j++)
+	  {
+	    fprintf(fh,"%s\t%s\t%d\t%s\t%c\t%d\n", gRNA4print, T->chr_names[m->nodes[i]->chrs[j]], m->nodes[i]->starts[j], seq, m->nodes[i]->strands[j], m->marray[i]);
+	  }
+      }
       i++;
     }
   free(gRNA4print);
@@ -1056,7 +1456,10 @@ void *thread_worker(void *arg)
   // match
   mcontainer* m = TrieAMatch(args_table->T, args_table->grna, args_table->T->readlen, args_table->maxMismatch);
   if(args_table->outFileType == 2) {
-    writeInCasOffinder(args_table->outfh, args_table->grna, m, args_table->T);
+    writeInCasOffinder(args_table->outfh, args_table->grna, m, args_table->T,0);
+  }
+  else if(args_table->outFileType == 3) {
+    writeInCasOffinder(args_table->outfh, args_table->grna, m, args_table->T, 1);
   }
   else {
     writeInBed_lighter(args_table->outfh, m, args_table->chr, args_table->start, args_table->end, args_table->grna, args_table->strand, args_table->T);
@@ -1077,7 +1480,6 @@ void GRNAsMatch(trie *T, grna_list *g, int guidelen, char *pam, int maxMismatch,
   long long k;
   int j;
   char *grna = malloc(sizeof(char)*(guidelen+1)); // here the gRNA sequence will be gRNA protospacer + PAM, not the sequence as in candidate area!
-  int identical_seq = 0; // counts the sequences not added in the tree because they were already there
   mcontainer* m;
   int pamlen = strlen(pam);
 
@@ -1106,11 +1508,16 @@ void GRNAsMatch(trie *T, grna_list *g, int guidelen, char *pam, int maxMismatch,
     // match grna
     m = TrieAMatch(T, grna, T->readlen, maxMismatch);
     if(outFileType==2) {
-      writeInCasOffinder(outfh, grna, m, T);
+      writeInCasOffinder(outfh, grna, m, T, 0);
+    }
+    else if(outFileType == 3) {
+      writeInCasOffinder(outfh, grna, m, T, 1);
     }
     else {
+      // i.e. outFileType==1; and default behaviour
       writeInBed_lighter(outfh, m, g->chr, g->starts[i], g->starts[i]+guidelen, grna, g->strands[i], T);
     }
+
     mcontainer_free(m); // TrieAMatch creates a new container each time, so we have to free it here
   }
   free(grna);
@@ -1126,8 +1533,6 @@ void GRNAsMatchThreaded(trie *T, grna_list *g, int guidelen, char *pam, int maxM
   char *grna = NULL;
   grna = malloc(sizeof(char)*(guidelen+1)); // here the gRNA sequence will be gRNA protospacer + PAM, not the sequence as in candidate area!
   grna = calloc((guidelen+1),sizeof(char)); // here the gRNA sequence will be gRNA protospacer + PAM, not the sequence as in candidate area!
-  int identical_seq = 0; // counts the sequences not added in the tree because they were already there
-  mcontainer* m;
   int pamlen = strlen(pam);
 
   // Install threading related variables and attributes
@@ -1140,7 +1545,6 @@ void GRNAsMatchThreaded(trie *T, grna_list *g, int guidelen, char *pam, int maxM
   int res; // to catch thread exit result 
   struct arg_struct args_table[nr_of_threads];
   int tpos; // thread position, expected to be 0 <= tpos < nr_of_threads
-  // int fre; // 1 if threads is fre, 0 otherwise.
   // install varables in args table
   
   for(tpos=0;tpos<nr_of_threads;tpos++) {  
@@ -1220,11 +1624,8 @@ void TrieAMatchSequenceThreads(trie* T, char* fname, int maxMismatch, char* outp
 {
   faread_struct *fas = installFastaReader(fname, uppercaseOnly);
   grna_list *g;
-  int chr_number;
   int pamlen = strlen(pam);
   int guidelen = PROTOSPACER_LENGTH+pamlen;
-  mcontainer* m;
-  int i;
 
   FILE* outfh = open_file(outputName, "w");
   

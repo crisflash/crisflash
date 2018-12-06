@@ -68,11 +68,28 @@ typedef struct grna_list {
   /* The struct is used for storing list of gRNA start positions */
   char *pstrand; // pointer to forward strand of fasta sequence
   char *nstrand; // pointer to reverse strand of fasta sequence (translation from forward)
+  long long slen; // length of pstrand and nstrand sequences
   char *chr; // chromosome name
   long long length; // number of space/positions allocatd for gRNAs
-  long long pos; // nr of gRNas
-  long long *starts; // array of gRNA start positions
+  long long pos; // nr of gRNAs
+  /* gRNA start positions are expressed by three different numbers: */
+  long long *starts;  // array of gRNA start positions as in pstrand and nstrand. Note that pstrand and nstrand here may be variant and indel modified haplotye.
+  long long *ref_starts; // array of gRNA start positions in standard reference genome. Note that this is an abritary, hypothetical start position after deducting all indel info in 5'.
   char *strands; // array of gRNA strands
+  char *mtypes; // array of gRNA modification types by variant data, coded as follows:
+  /*    
+    gRNA not motified - 0 (default)
+    PAM introduced (PAM+) - a,A,1
+    PAM modified (PAMm) - b,B,2
+    Protospaced modified (PROm) - c,C,3
+    PAM+ and PAMm - d,D,4
+    PAM+ and PROm - e,E,5
+    PAMm and PROm - f,F,6
+    PAM+ and PAMm and PROm - g,G,7
+
+    The coding is used and reported as follows. In case PAM+ occurs only in haplotype 1 (variants of 1|0 in vcf file), we record and report 'a'; in case of haplotype 2 (variants of 0|1 in vcf file), its 'A'; if PAM+ occurs in both haplotypes, provided that the entire sequence of the gRNA for both haplotypes is identical, we record and report '1'.
+   */
+  char *sequences; // array of back to back gRNA sequences.
 } grna_list;
 
 struct arg_struct
@@ -96,7 +113,10 @@ struct arg_struct
 /*************************/
 
 double now();
-void readFaToTrie(trie *T, char *genomefname, char *pam, char* outputfname, int append, int upper_case_only, int printGRNAs);
+void readFaToTrie(trie *T, char *genomefname, char *pam, char* outputfname, int upper_case_only, int printGRNAs);
+void readFaToTrieVCF(trie *T, char *genomefname1, char *genomefname2, char *pam, char* outputfname, int upper_case_only, int printGRNAs);
 void TrieAMatchSequenceThreads(trie* T, char* fname, int maxMismatch, char* outputName, int outFileType, char *pam, int upper_case_only, int threads, int printOnly);
+
+grna_list *fastaVariantSequenceToGRNAsequences(char *header, char *s, char *sr, long long spos, char *pam);
 
 #endif

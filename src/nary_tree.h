@@ -47,6 +47,8 @@ typedef struct trieNodeTerminal
 	int *chrs; // array of chromosome names
 	char *strands; // array of strands
 	int *starts; // array of start positions
+        char *mtypes; // array of variant modifications in gRNA
+        char *htypes; // array of source haplotypes. 1 for haplotype 1 (i.e. 1|0 in VCF), 2 for (0|1) and 3 for (1|1) or haplotype level info not available
 	char nt;
 	float score;
 } trieNodeTT;
@@ -128,7 +130,7 @@ trie* TrieDestroy(trie* T);
 int addChr(trie* T, char* chrname, int namelen);
 trieNodeT* characterFound(trieNodeT* level, char nt);
 trieNodeTT* characterFoundTerminal(trieNodeTT* levelT, char nt);
-int TrieAdd(trie* T, char* array, int alen, int chr, char strand, int start, float score, int* identical_seq);
+int TrieAdd(trie* T, char* array, int alen, int chr, char strand, char mtype, char htype, int start, float score, int* identical_seq);
 int TrieMatch(trie *trie, char array[], int alen);
 mcontainer *TrieAMatch(trie *T, char array[], int alen, int nmis);
 int TrieAMatchSummary(trie *T, char array[], int alen, int nmis);

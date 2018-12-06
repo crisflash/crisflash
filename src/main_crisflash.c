@@ -24,10 +24,6 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
         #define _GNU_SOURCE
 #endif
 
-/* 
-   Written by Adrien Jacquin, June 2017.
-*/
-
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -68,7 +64,7 @@ static int usage()
 {
   /*	while ((c = getopt(argc, argv, "g:b:o:s:v:m:@:it:S:hu")) != -1)  */
   fprintf(stderr, "\n");
-  fprintf(stderr, "Program: crisflash (A tool for CRISPR/Cas9 sgRNA design and off-target validation)\n");
+  fprintf(stderr, "Program: crisflash (A tool for CRISPR/Cas9 sgRNA design and off-target identification)\n");
   fprintf(stderr, "Version: %s\n\n", CRISFLASH_VERSION);
   fprintf(stderr, "Usage:   crisflash -g <genome.fa> -s <input.fa> -o <output> [options]\n\n");
   fprintf(stderr, "Options:\n");
@@ -80,11 +76,13 @@ static int usage()
   fprintf(stderr, "          -V FILE\tphased VCF file.\n"); /* vcf file */  
   /* boolean options for output file format */
   /*
-    -B bam output
+    -B bed output
     -C cas-offinder output
+    -A cas-offinder output with additional variant information
   */
   fprintf(stderr, "          -B\t\t save output in BED format, with sequence provided on comment field and off-target score on score field. (Default)\n");
   fprintf(stderr, "          -C\t\t save output in cas-offinder format.\n");
+  fprintf(stderr, "          -A\t\t save output in cas-offinder format, with additional column reporting variant and haplotype info.\n");
   /* output file name */
   fprintf(stderr, "          -o FILE\toutput file name saved in BED format.\n");
   /* options for parameters */
@@ -112,27 +110,25 @@ int main(int argc, char **argv)
 	char* referenceGenomePath = NULL; // path for the reference genome
 	char* sequencePath = NULL; // path for the sequence
 	char* vcfPath = NULL; // path for the VCF file
-	char* prefixName = NULL; // prefix for the output BED files, default = results
 	char* outFile = NULL; // output file in BED format for results.
 	int maxMismatch = 2; // number of mismatches allowed for matching, default = 2
 	int threadFlag = 0; // booelan: use a multi-threaded fucntion for matching itself, default = False
 	int nr_of_threads = 1; // number of threads in case of using multi-threaded function, default = 1
 	int upper_case_only = 0; // 1 if soft-masked lowercase bases are excluded both from genome indexing to trie as well as from candidate identification
-	trie *T;
+	trie *T = NULL;
 	int index;
 	int c;
-	char *bedCandidatesPath = NULL;
-	int matchItselfPathBool = 0;
-	int inputMatchItselfBool = 0;
-	int outFileType = 1; // default is 1 = BED format; 2 = cas-offinder format;
+	int outFileType = 1; // default is 1 = BED format; 2 = cas-offinder format; 3 = cas-offinder format with additional column for variant and haplotype info
 	int printGRNAsOnly = 0;
+	char *genome1 = NULL;
+	char *genome2 = NULL;
+	int phased;
 
 	// default PAM sequence is 'NGG'
 	char * pam =  malloc(sizeof(char)*4);			     
 	strcpy(pam,"NGG");
-	       
-	// while ((c = getopt(argc, argv, "g:b:o:s:v:m:@:it:lS:h")) != -1)
-	while ((c = getopt(argc, argv, "BCg:o:s:vV:m:t:lhp:")) != -1)
+
+	while ((c = getopt(argc, argv, "ABCg:o:s:vV:m:t:lhp:")) != -1)
 	  {
 	    switch (c)
 	      {		
@@ -188,6 +184,10 @@ int main(int argc, char **argv)
 		/* Set output file type cas-offinder */
 		outFileType = 2;
 		break;
+	      case 'A':
+		/* Set output file type cas-offinder with additional column of variant and haplotype info*/
+		outFileType = 3;
+		break;
 	      case 'p':
 		free(pam);
 		pam = malloc((sizeof(char)*strlen(optarg))+1);
@@ -229,6 +229,7 @@ int main(int argc, char **argv)
 
 	// if output file had not been set, display help and exit.
 	if (!outFile) {
+	  fprintf(stderr, "[crisflash] ERROR: No output defined. Use -o flag. Exiting!\n");
 	  usage();
 	  exit(1);
 	}
@@ -237,52 +238,64 @@ int main(int argc, char **argv)
 	  If values for only referenceGenome or sequence path, print all gRNA candidates and exit.
 	  No need to build Trie and match candidates.
 	*/
-	if((referenceGenomePath)&&(!sequencePath)) {
-	  readFaToTrie(T, referenceGenomePath, pam, outFile, 0, upper_case_only,1);
-	  exit(0);
-	}
 	if((!referenceGenomePath)&&(sequencePath)) {
-	  readFaToTrie(T, sequencePath, pam, outFile, 0, upper_case_only,1);
-	  exit(0);
+	  if(vcfPath) {
+	    usage();
+	    exit(1);	  
+	  }
+	  else {
+	    readFaToTrie(T, sequencePath, pam, outFile, upper_case_only,printGRNAsOnly);
+	    exit(0);
+	  }
 	}
-
-	// We have values for referene genome and sequence for target area. Therefore, we will index reference genome to Trie!
-	T = TrieCreate(PROTOSPACER_LENGTH + strlen(pam));
-	
-	if (!vcfPath) {
-	  readFaToTrie(T, referenceGenomePath, pam, outFile, 0, upper_case_only,0);
+	if((referenceGenomePath)&&(!sequencePath)) {
+	  printGRNAsOnly = 1;
 	}
 	else {
-	  // variant data has been provided. We create haplotype based genomic sequences first and load them to Trie one by one.
-	  char *output_VCF1 = malloc(sizeof(char)*(strlen(referenceGenomePath) + strlen(vcfPath) + 6));
-	  char *output_VCF2 = malloc(sizeof(char)*(strlen(referenceGenomePath) + strlen(vcfPath) + 6));	    
-	  int phased;
-	  int append = 0;
-	  strcpy(output_VCF1,referenceGenomePath);
-	  strcpy(output_VCF2,referenceGenomePath);
-	  strcat(output_VCF1,"_");
-	  strcat(output_VCF2,"_");
-	  strcat(output_VCF1,vcfPath);
-	  strcat(output_VCF2,vcfPath);
-	  strcat(output_VCF1,"1.fa");
-	  strcat(output_VCF2,"2.fa");
-	  fprintf(stdout,"[crisflash] Creating phased genomes for %s.\n", vcfPath);
-	  phased = VCF_to_genome(referenceGenomePath, vcfPath, output_VCF1, output_VCF2);
-	  // printf("============== 1st HAPLOTYPE ==============\n");
-	  readFaToTrie(T, output_VCF1, pam, outFile, append, upper_case_only,0);
-	  if (phased == 1)
-	    {
-	      // printf("============== 2nd HAPLOTYPE ==============\n");
-	      append += T->nr_sequences;
-	      readFaToTrie(T, output_VCF2, pam, outFile, append, upper_case_only,0);
-	    }
-	  free(output_VCF1);
-	  free(output_VCF2);
-	}	  
+	  T = TrieCreate(PROTOSPACER_LENGTH + strlen(pam));
+	}
+
+	if (vcfPath) {
+	  // variant data has been provided. First we create separate separate genome sequences for Watson and Crick strad.
+	  int gblen = strlen(basename(referenceGenomePath));
+          int vblen = strlen(basename(vcfPath));
+	  genome1 = malloc(sizeof(char)*(gblen+vblen+6));
+	  genome2 = malloc(sizeof(char)*(gblen+vblen+6));
+	  genome1[0] = '\0';
+	  genome2[0] = '\0';
+	  strcat(genome1,basename(referenceGenomePath));
+	  strcat(genome2,basename(referenceGenomePath));	  
+	  strcat(genome1,"_");
+	  strcat(genome2,"_");
+	  strcat(genome1,basename(vcfPath));
+	  strcat(genome2,basename(vcfPath));
+	  fprintf(stdout,"%s\n",genome1);
+	  strcat(genome1,"1.fa");
+	  strcat(genome2,"2.fa");
+	  phased = VCF_to_genome(referenceGenomePath, vcfPath, genome1, genome2);
+	  if (phased == 1) {
+	    readFaToTrieVCF(T, genome1, genome2, pam, outFile, upper_case_only,printGRNAsOnly);
+	  }
+	  else {
+	    readFaToTrie(T, genome1, pam, outFile, upper_case_only,printGRNAsOnly);
+	  }
+	  free(genome1);
+	  free(genome2);
+	  if(printGRNAsOnly) {
+	    exit(0);
+	  }
+	}
+	else {
+	  // We have values for referene genome and sequence for target area. Therefore, we will index reference genome to Trie!
+	  readFaToTrie(T, referenceGenomePath, pam, outFile, upper_case_only,printGRNAsOnly);
+	  if(printGRNAsOnly) {
+	    exit(0);
+	  }
+	}
 	
 	TrieAMatchSequenceThreads(T, sequencePath, maxMismatch, outFile, outFileType, pam, upper_case_only, nr_of_threads,0);
 
-	// We will not free Trie as the process is slow and the block of memory will be handed back to OS on exit anyway.
+	// We will not free Trie as the process is slow and the block of memory will be handed back to OS for freeing on exit anyway.
 	/*
 	  T = TrieDestroy(T);
 	  free(pam);

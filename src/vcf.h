@@ -23,7 +23,7 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 #define DEF_VCF
 
 #ifndef CRISFLASH_VERSION
-#define CRISFLASH_VERSION "1.1.0"
+#define CRISFLASH_VERSION "1.2.0"
 #endif
 
 #include <stdio.h>
@@ -33,8 +33,8 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "nary_tree.h"
 
-int find_chromosome_positions_ref(char* gName, int* chr_pos, int* chr_size, char** chr_names);
-int find_chromosome_positions_vcf(char* vcfName, int* chr_pos, char** chr_names);
+int find_chromosome_positions_ref(char* gName, long long* chr_pos, long long* chr_size, char** chr_names);
+int find_chromosome_positions_vcf(char* vcfName, long long* chr_pos, char** chr_names);
 int write_variation(VCF* vcf, char* buffer, int length_buffer, int pos, FILE* f_new, FILE* f_new2, int phased, int* var1, int* var2);
 int VCF_to_genome(char* gName, char* vcfName, char* newName, char* newName2);
 

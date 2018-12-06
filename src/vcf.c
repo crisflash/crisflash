@@ -37,9 +37,9 @@ along with Crisflash.  If not, see <http://www.gnu.org/licenses/>.
 #include "nary_tree.h"
 #include "read.h"
 
-int find_chromosome_positions_ref(char* gName, int* chr_pos, int* chr_size, char** chr_names)
+int find_chromosome_positions_ref(char* gName, long long* chr_pos, long long* chr_size, char** chr_names)
 {
-	// Parse a first time the reference genome and store the chromosome positions, sizes and names
+        // Parse a first time the reference genome and store the chromosome positions, sizes and names
 	// in the tables chr_pos, chr_size and chr_names
 	// Return pT, the current position in the tables, or the size of the tables
         FILE* f = fopen(gName,"r");
@@ -50,7 +50,7 @@ int find_chromosome_positions_ref(char* gName, int* chr_pos, int* chr_size, char
 	  }
 	
 	int pT = 0;
-	int previous_pos = 0;
+	long long  previous_pos = 0;
 	int size = 0;
 	char* line = NULL;
 	size_t len = 0;
@@ -60,7 +60,7 @@ int find_chromosome_positions_ref(char* gName, int* chr_pos, int* chr_size, char
 	struct timeval t0, t1;
 	gettimeofday(&t0, 0);
 
-	fprintf(stdout,"[crisflash] Analysing %s ...\n", gName);
+	fprintf(stdout,"[crisflash] Analysing %s.\n", gName);
 	
 	while (read != -1)
 	{
@@ -93,19 +93,19 @@ int find_chromosome_positions_ref(char* gName, int* chr_pos, int* chr_size, char
 	gettimeofday(&t1, 0);
 	elapsed = (t1.tv_sec-t0.tv_sec);
 	if(elapsed < 1) { elapsed = 1; }
-	fprintf(stderr,"[crisflash] %d chromosomes and chromosomal fragments identified (%ld seconds).\n", pT, elapsed);
+	fprintf(stderr,"[crisflash] %d sequences for chromosomes and chromosomal fragments identified (%ld seconds).\n", pT, elapsed);
 	
 	return pT;
 }
 
-int find_chromosome_positions_vcf(char* vcfName, int* chr_pos, char** chr_names)
+int find_chromosome_positions_vcf(char* vcfName, long long* chr_pos, char** chr_names)
 {
 	// Parse a first time the VCF file and store the chromosome positions and names
 	// in the tables chr_pos and chr_names
 	// Return pT, the current position in the tables, or the size of the tables
 	FILE* f = fopen(vcfName,"r");
-	int pT = 0;
-	int previous_pos = 0;
+	long long pT = 0;
+	long long previous_pos = 0;
 	char* line = NULL;
 	size_t len = 0;
 	ssize_t read = getline(&line, &len, f);
@@ -166,9 +166,21 @@ int write_variation(VCF* vcf, char* buffer, int length_buffer, int pos, FILE* f_
 	}
 	if (phased == 1)
 	{
+	  // NOTE: + sign is used separatey in front of every insert base. Similarly, | is used in front of every changed base (SNP).
+	  // Case for "1|1", variation in both haplotypes is implemented further down!
+
 		if (strcmp(vcf->hap,"1|0") == 0) // variation in haplotype 1
 		{
-			if (vcf->dif >= 0) // insertion or SNP
+		        if (vcf->dif == 0) // SNP
+			{
+			  for (int i=0; i<strlen(vcf->alt); i++)
+			    {
+			      fputc('|',f_new);
+			      fputc(vcf->alt[i],f_new);
+			    }
+			  *var1 += 1;
+                        }
+			else if (vcf->dif > 0) // insertion or SNP
 			{
 				for (int i=0; i<strlen(vcf->alt); i++)
 				{
@@ -191,11 +203,20 @@ int write_variation(VCF* vcf, char* buffer, int length_buffer, int pos, FILE* f_
 		}
 		if (strcmp(vcf->hap,"0|1") == 0) // variation in haplotype 2
 		{
-			if (vcf->dif >= 0) // insertion or SNP
+			if (vcf->dif == 0) // SNP
+			{
+			  for (int i=0; i<strlen(vcf->alt); i++)
+			    {
+			      fputc('|',f_new2);
+			      fputc(vcf->alt[i],f_new2);
+			    }
+			  *var2 += 1;
+                        }
+			else if (vcf->dif > 0) // insertion or SNP
                         {
                                 for (int i=0; i<strlen(vcf->alt); i++)
                                 {
-                                        if (i >= strlen(vcf->ref)) { fputc('+',f_new2); }
+					if (i >= strlen(vcf->ref)) { fputc('+',f_new2); }
                                         fputc(vcf->alt[i],f_new2);
                                 }
                                 *var2 += 1;
@@ -214,7 +235,20 @@ int write_variation(VCF* vcf, char* buffer, int length_buffer, int pos, FILE* f_
 		}
 	}
 	// variation in both haplotypes
-	if (vcf->dif >= 0) // insertion or SNP
+	if (vcf->dif == 0) // SNP
+	  {
+	    for (int i=0; i<strlen(vcf->alt); i++)
+	      {
+		fputc('|',f_new);
+		fputc(vcf->alt[i],f_new);
+		fputc('|',f_new2);
+		fputc(vcf->alt[i],f_new2);
+	      }
+	    *var1 += 1;
+	    *var2 += 1;
+	  }
+
+	else if (vcf->dif > 0) // insertion or SNP
 	{
 		for (int i=0; i<strlen(vcf->alt); i++)
 		{
@@ -265,18 +299,20 @@ int VCF_to_genome(char* gName, char* vcfName, char* newName, char* newName2)
 	int nb_of_var_1 = 0;
 	int nb_of_var_2 = 0;
 
-	int chr_pos[CHR_NUMBER_MAX]; // the list of positions of the chromosomes in the reference genome file
-	int chr_size[CHR_NUMBER_MAX]; // the list of size of the chromosomes in the reference genome file
+	long long chr_pos[CHR_NUMBER_MAX]; // the list of positions of the chromosomes in the reference genome file
+	long long chr_size[CHR_NUMBER_MAX]; // the list of size of the chromosomes in the reference genome file
 	char* chr_names[CHR_NUMBER_MAX]; // the list of chromosome names in the reference genome file
 	int n = find_chromosome_positions_ref(gName,chr_pos,chr_size,chr_names); // n is the tables size
 	/* Same for the VCF file */
-	int chr_pos_vcf[CHR_NUMBER_MAX]; // the list of positions of the chromosomes in the VCF file
+	long long chr_pos_vcf[CHR_NUMBER_MAX]; // the list of positions of the chromosomes in the VCF file
 	char* chr_names_vcf[CHR_NUMBER_MAX]; // the list of chromosome names in the VCF file
 	int m = find_chromosome_positions_vcf(vcfName,chr_pos_vcf,chr_names_vcf); // m is the tables size
 	
+	fprintf(stdout,"[crisflash] Creating phased genomes.\n");
+
 	for (int i = 0; i < n; i++)
 	{
-		fseek(f_ref, chr_pos[i], SEEK_SET);
+		fseek(f_ref, chr_pos[i], SEEK_SET);		
 		char* buffer = malloc(sizeof(char)*(chr_size[i]+1));
 		buffer[chr_size[i]] = '\0';
 		int read = fread(buffer,chr_size[i],1,f_ref);
@@ -290,7 +326,7 @@ int VCF_to_genome(char* gName, char* vcfName, char* newName, char* newName2)
 			x++;
 		}
 		chr[x-1] = '\0';
-		fprintf(stdout,"[crisflash] Processing chromosome %s ...\n", chr);
+		fprintf(stdout,"[crisflash] Adding variants to '%s'\n", chr);
 		// Initializing position in buffer and chromosome
 		int pos = 0;
 		int chr_pos = 1;
@@ -299,7 +335,7 @@ int VCF_to_genome(char* gName, char* vcfName, char* newName, char* newName2)
 		while (j<m && strcmp(chr_names_vcf[j],chr_names[i]) != 0) { j++; }
 		if (j==m)
 		{
-		        fprintf(stdout,"[crisflash] WARNING: No variants for chromosome %s!\n", chr);
+		        fprintf(stdout,"[crisflash] WARNING: No variants for %s!\n", chr);
 			int write = fwrite(buffer,chr_size[i],1,f_new);
 			if (write == -1) { fprintf(stderr,"[crisflash] ERROR: Writing to %s failed. Exiting!\n", newName2); exit(1); }
 			if (phased == 1) { write = fwrite(buffer,chr_size[i],1,f_new2); }
@@ -403,8 +439,8 @@ int VCF_to_genome(char* gName, char* vcfName, char* newName, char* newName2)
 
 	end_time = now();
 	total_time = end_time - start_time;
-	if (phased == 1) {fprintf(stdout,"[crisflash] Finished creating phased genomes %s (%d variants) and %s (%d variants). (%f seconds)\n", newName, nb_of_var_1, newName2, nb_of_var_2, total_time); }
-	else {fprintf(stdout,"[crisflash] A modified genome incorporating variant data (%d variants) has been saved in %s. (%f seconds)\n", nb_of_var_1, newName, total_time);}
+	if (phased == 1) {fprintf(stdout,"[crisflash] Phased genomes created! Sequences saved in %s (%d variants) and %s (%d variants). Phasing run time: %f seconds.\n", newName, nb_of_var_1, newName2, nb_of_var_2, total_time); }
+	else {fprintf(stdout,"[crisflash] A modified genome incorporating variant data (%d variants) saved in %s. Phasing run time: %f seconds.\n", nb_of_var_1, newName, total_time);}
 
 	for (int i=0; i<n; i++) { free(chr_names[i]); }
 	for (int i=0; i<m; i++) { free(chr_names_vcf[i]); }
